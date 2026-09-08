@@ -40,6 +40,12 @@ export interface Repasse {
   medico_id: number;
   convenio_id?: number;
   nome_paciente: string;
+  desconto_paciente: number;
+  desconto_cartao: number;
+  valor_recebido: number;
+  percentual_terceiro: number;
+  valor_terceiro: number;
+  saldo_controle: number;
   hospital_id: number;
   data_cirurgia: string;
   valor: number;
