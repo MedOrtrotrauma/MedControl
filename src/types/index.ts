@@ -40,12 +40,6 @@ export interface Repasse {
   medico_id: number;
   convenio_id?: number;
   nome_paciente: string;
-  desconto_paciente: number;
-  desconto_cartao: number;
-  valor_recebido: number;
-  percentual_terceiro: number;
-  valor_terceiro: number;
-  saldo_controle: number;
   hospital_id: number;
   data_cirurgia: string;
   valor: number;
@@ -57,7 +51,7 @@ export interface Repasse {
   categoria_particular?: 'consulta_onda' | 'infiltracao_cirurgia';
   tipo_procedimento?: string;
   quantidade?: number;
-  forma_pagamento?: 'credito' | 'pix' | 'debito' | 'especie';
+  forma_pagamento?: 'credito' | 'pix' | 'debito' | 'especie' | 'convenio';
   valor_unitario?: number;
   month_reference?: string;
   observacao?: string;
@@ -74,4 +68,12 @@ export interface Repasse {
   medico?: Medico;
   convenio?: Convenio;
   hospital?: Hospital;
+  desconto_paciente: number;
+  desconto_cartao: number;
+  valor_recebido: number;
+  percentual_terceiro: number;
+  valor_terceiro: number;
+  saldo_controle: number;
+  numero_atendimento: string;
+  valor_glosa: number;
 }

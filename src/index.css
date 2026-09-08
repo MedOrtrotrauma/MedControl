@@ -112,6 +112,10 @@ button:disabled { cursor: not-allowed; opacity: .65; }
 .table-panel .section-title { padding: 22px 24px; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; min-width: 900px; }
+.tbl-socio { min-width: 2200px; }
+.tbl-terc { min-width: 1900px; }
+.tbl-socio td, .tbl-terc td { white-space: nowrap; font-size: 11px; padding: 11px 10px; }
+.tbl-socio th, .tbl-terc th { font-size: 9px; padding: 10px 10px; }
 th { padding: 12px 20px; color: #84939a; background: #f8fafb; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: left; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; font-weight: 800; }
 td { padding: 14px 20px; border-bottom: 1px solid #edf1f2; color: #516169; font-size: 12px; vertical-align: middle; }
 tr:hover td { background: #fbfdfd; }
