@@ -1,0 +1,52 @@
+-- ==========================================
+-- ATUALIZAÇÃO DA TABELA repasses
+-- ==========================================
+-- Adiciona as colunas que estão no frontend mas faltam no schema
+-- ==========================================
+
+-- 1. Colunas para o cálculo de repasse de SÓCIO
+ALTER TABLE public.repasses
+ADD COLUMN IF NOT EXISTS auxilio_1 numeric NOT NULL DEFAULT 0,
+ADD COLUMN IF NOT EXISTS auxilio_2 numeric NOT NULL DEFAULT 0,
+ADD COLUMN IF NOT EXISTS taxa_1_5 numeric NOT NULL DEFAULT 0,
+ADD COLUMN IF NOT EXISTS imposto_percentual numeric NOT NULL DEFAULT 12,
+ADD COLUMN IF NOT EXISTS outras_deducoes numeric NOT NULL DEFAULT 0;
+
+-- 2. Coluna que define o tipo de destinatário (usado no filtro principal)
+ALTER TABLE public.repasses
+ADD COLUMN IF NOT EXISTS destinatario_tipo text NOT NULL DEFAULT 'terceiro'
+CONSTRAINT chk_destinatario_tipo CHECK (destinatario_tipo IN ('socio', 'terceiro'));
+
+-- 3. Colunas de status e controle de pagamento
+ALTER TABLE public.repasses
+ADD COLUMN IF NOT EXISTS status_pagamento text NOT NULL DEFAULT 'pendente'
+CONSTRAINT chk_status_pagamento CHECK (status_pagamento IN ('pendente', 'aprovado', 'pago')),
+ADD COLUMN IF NOT EXISTS data_pagamento date;
+
+-- 4. Coluna que guarda o valor líquido final (usado para sócio e terceiro)
+ALTER TABLE public.repasses
+ADD COLUMN IF NOT EXISTS valor_liquido numeric NOT NULL DEFAULT 0;
+
+-- ==========================================
+-- ÍNDICES PARA PERFORMANCE
+-- ==========================================
+
+-- Agiliza a busca por mês + tipo (usado no load do componente)
+CREATE INDEX IF NOT EXISTS idx_repasses_month_tipo 
+ON public.repasses (month_reference, destinatario_tipo);
+
+-- Agiliza os filtros de status e médico (usados nos selects)
+CREATE INDEX IF NOT EXISTS idx_repasses_status 
+ON public.repasses (status_pagamento);
+
+CREATE INDEX IF NOT EXISTS idx_repasses_medico_id 
+ON public.repasses (medico_id);
+
+-- ==========================================
+-- (OPCIONAL) Ajuste na coluna convenio_id
+-- ==========================================
+-- O componente NÃO usa convenio_id (ele é NULL no insert).
+-- Se quiser garantir que ele seja opcional, já está como nullable no schema.
+-- Caso tenha uma constraint NOT NULL, remova com:
+-- ALTER TABLE public.repasses ALTER COLUMN convenio_id DROP NOT NULL;
+-- (Verifique antes se é necessário)
