@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { DestinatarioTipo } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -188,7 +189,6 @@ export const dbHelpers = {
     return { data, error };
   },
 
-  // NOVA FUNÇÃO: Repasses por Mês
   async getRepassesByMonth(month: string) {
     const { data, error } = await supabase
       .from('repasses')
@@ -199,6 +199,21 @@ export const dbHelpers = {
         hospital:hospitais(*)
       `)
       .eq('month_reference', month)
+      .order('data_cirurgia', { ascending: false });
+    return { data, error };
+  },
+
+  async getRepassesByMonthAndTipo(month: string, destinatarioTipo: DestinatarioTipo) {
+    const { data, error } = await supabase
+      .from('repasses')
+      .select(`
+        *,
+        medico:medicos(*),
+        convenio:convenios(*),
+        hospital:hospitais(*)
+      `)
+      .eq('month_reference', month)
+      .eq('destinatario_tipo', destinatarioTipo)
       .order('data_cirurgia', { ascending: false });
     return { data, error };
   },

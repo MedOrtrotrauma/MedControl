@@ -1,758 +1,286 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, DollarSign, User, Building, Guitar as Hospital, CreditCard, UserCheck, Stethoscope, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleDollarSign,
+  ClipboardList,
+  FileDown,
+  Filter,
+  Pencil,
+  Plus,
+  ReceiptText,
+  Search,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
-import { Repasse, Medico, Convenio, Hospital as HospitalType } from '../types';
-import { RepasseReport } from './Reports/RepasseReport';
-import { EditRepasseModal } from './Modals/EditRepasseModal';
-import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
-import { useAuth } from './Auth/AuthContext';
+import type { DestinatarioTipo, Hospital, Medico, Repasse, StatusPagamento } from '../types';
 
-export const RepasseComponent: React.FC = () => {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'convenio' | 'particular'>('convenio');
-  const [activeView, setActiveView] = useState<'form' | 'report'>('form');
+const money = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
+
+const formatDate = (value: string) => {
+  if (!value) return '-';
+  const [year, month, day] = value.split('T')[0].split('-');
+  return `${day}/${month}/${year}`;
+};
+
+const formatMonth = (value: string) => {
+  const [year, month] = value.split('-');
+  return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  });
+};
+
+const monthOptions = () => {
+  const today = new Date();
+  return Array.from({ length: 13 }, (_, index) => {
+    const date = new Date(today.getFullYear(), today.getMonth() - 6 + index, 1);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return { value, label: formatMonth(value) };
+  });
+};
+
+const initialForm = (month: string) => ({
+  medico_id: '',
+  hospital_id: '',
+  nome_paciente: '',
+  data_cirurgia: '',
+  tipo: 'consulta' as 'consulta' | 'cirurgia',
+  valor: '',
+  auxilio_1: '0',
+  auxilio_2: '0',
+  taxa_1_5: '0',
+  imposto_percentual: '12',
+  outras_deducoes: '0',
+  observacao: '',
+  month_reference: month,
+  status_pagamento: 'pendente' as StatusPagamento,
+});
+
+type FormData = ReturnType<typeof initialForm>;
+
+const toNumber = (value: string) => Math.max(0, Number(value.replace(',', '.')) || 0);
+
+const calculateNet = (form: FormData, tipo: DestinatarioTipo) => {
+  const bruto = toNumber(form.valor);
+  const auxilios = toNumber(form.auxilio_1) + toNumber(form.auxilio_2);
+  const taxa = toNumber(form.taxa_1_5);
+  const outras = toNumber(form.outras_deducoes);
+  const imposto = tipo === 'socio' ? (bruto * toNumber(form.imposto_percentual)) / 100 : 0;
+  return Math.max(0, bruto + auxilios - taxa - imposto - outras);
+};
+
+export function RepasseComponent() {
+  const [tipo, setTipo] = useState<DestinatarioTipo>('terceiro');
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [repasses, setRepasses] = useState<Repasse[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
-  const [convenios, setConvenios] = useState<Convenio[]>([]);
-  const [hospitais, setHospitais] = useState<HospitalType[]>([]);
+  const [hospitais, setHospitais] = useState<Hospital[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [editingRepasse, setEditingRepasse] = useState<Repasse | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().slice(0, 7);
-  });
-  const [showMonthSelector, setShowMonthSelector] = useState(false);
-
-  const [formData, setFormData] = useState({
-    medico_id: '',
-    nome_paciente: '',
-    data_cirurgia: '',
-    tipo_procedimento_detalhado: 'consulta' as 'consulta' | 'infiltracao' | 'onda_choque' | 'cirurgia_particular' | 'medico_parceiro',
-    valor: '',
-    month_reference: '',
-    observacao: ''
-  });
-
-  const [formDataConvenio, setFormDataConvenio] = useState({
-    medico_id: '',
-    convenio_id: '',
-    nome_paciente: '',
-    hospital_id: '',
-    data_cirurgia: '',
-    valor: '',
-    tipo: 'consulta' as 'consulta' | 'cirurgia',
-    month_reference: ''
-  });
-
-  useEffect(() => {
-    loadData();
-  }, [selectedMonth]);
-
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      month_reference: selectedMonth
-    }));
-    setFormDataConvenio(prev => ({
-      ...prev,
-      month_reference: selectedMonth
-    }));
-  }, [selectedMonth]);
+  const [editing, setEditing] = useState<Repasse | null>(null);
+  const [form, setForm] = useState<FormData>(initialForm(selectedMonth));
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'todos' | StatusPagamento>('todos');
+  const [medicoFilter, setMedicoFilter] = useState('');
+  const [error, setError] = useState('');
 
   const loadData = async () => {
     setLoading(true);
-    try {
-      const [repassesRes, medicosRes, conveniosRes, hospitaisRes] = await Promise.all([
-        dbHelpers.getRepassesByMonth(selectedMonth),
-        dbHelpers.getMedicos(),
-        dbHelpers.getConvenios(),
-        dbHelpers.getHospitais()
-      ]);
-
-      if (repassesRes.data) setRepasses(repassesRes.data);
-      if (medicosRes.data) setMedicos(medicosRes.data);
-      if (conveniosRes.data) setConvenios(conveniosRes.data);
-      if (hospitaisRes.data) setHospitais(hospitaisRes.data);
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+    setError('');
+    const [repassesResult, medicosResult, hospitaisResult] = await Promise.all([
+      dbHelpers.getRepassesByMonthAndTipo(selectedMonth, tipo),
+      dbHelpers.getMedicos(),
+      dbHelpers.getHospitais(),
+    ]);
+    if (repassesResult.error || medicosResult.error || hospitaisResult.error) {
+      setError('Não foi possível carregar os dados deste período.');
+    } else {
+      setRepasses((repassesResult.data as Repasse[]) || []);
+      setMedicos((medicosResult.data as Medico[]) || []);
+      setHospitais((hospitaisResult.data as Hospital[]) || []);
     }
     setLoading(false);
   };
 
-  const generateMonthOptions = () => {
-    const months = [];
-    const today = new Date();
+  useEffect(() => {
+    void loadData();
+  }, [selectedMonth, tipo]);
 
-    for (let i = -6; i <= 3; i++) {
-      const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-      const value = date.toISOString().slice(0, 7);
-      const label = date.toLocaleDateString('pt-BR', {
-        month: 'long',
-        year: 'numeric'
-      });
-
-      months.push({
-        value,
-        label: label.charAt(0).toUpperCase() + label.slice(1)
-      });
-    }
-
-    return months;
-  };
-
-  const formatSelectedMonth = (month: string) => {
-    const [year, monthNum] = month.split('-');
-    const date = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
-    const label = date.toLocaleDateString('pt-BR', {
-      month: 'long',
-      year: 'numeric'
-    });
-    return label.charAt(0).toUpperCase() + label.slice(1);
-  };
-
-  const calcularValoresRepasse = (tipoProcedimento: string, valor: number) => {
-    const porcentagens: { [key: string]: number } = {
-      'consulta': 16.33,
-      'infiltracao': 40.00,
-      'onda_choque': 30.00,
-      'cirurgia_particular': 2.00,
-      'medico_parceiro': 50.00
-    };
-
-    const porcentagem = porcentagens[tipoProcedimento] || 0;
-    const valorRepasse = (valor * porcentagem) / 100;
-
-    return { porcentagem, valorRepasse };
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      let result;
-
-      if (activeTab === 'convenio') {
-        result = await dbHelpers.createRepasse({
-          medico_id: parseInt(formDataConvenio.medico_id),
-          convenio_id: parseInt(formDataConvenio.convenio_id),
-          nome_paciente: formDataConvenio.nome_paciente,
-          hospital_id: parseInt(formDataConvenio.hospital_id),
-          data_cirurgia: formDataConvenio.data_cirurgia,
-          valor: parseFloat(formDataConvenio.valor),
-          tipo: formDataConvenio.tipo,
-          is_particular: false,
-          month_reference: formDataConvenio.month_reference
-        });
-      } else {
-        const valor = parseFloat(formData.valor);
-        const { porcentagem, valorRepasse } = calcularValoresRepasse(formData.tipo_procedimento_detalhado, valor);
-
-        let hospitalId = 1;
-        if (hospitais.length > 0) {
-          hospitalId = hospitais[0].id;
-        }
-
-        result = await dbHelpers.createRepasse({
-          medico_id: parseInt(formData.medico_id),
-          nome_paciente: formData.nome_paciente,
-          hospital_id: hospitalId,
-          data_cirurgia: formData.data_cirurgia,
-          valor: valor,
-          tipo: 'consulta',
-          is_particular: true,
-          tipo_procedimento_detalhado: formData.tipo_procedimento_detalhado,
-          porcentagem_repasse: porcentagem,
-          valor_repasse_medico: valorRepasse,
-          month_reference: formData.month_reference,
-          observacao: formData.observacao
-        });
-      }
-
-      if (result.error) {
-        console.error('Erro:', result.error);
-      } else {
-        setFormDataConvenio({
-          medico_id: '',
-          convenio_id: '',
-          nome_paciente: '',
-          hospital_id: '',
-          data_cirurgia: '',
-          valor: '',
-          tipo: 'consulta',
-          month_reference: selectedMonth
-        });
-
-        setFormData({
-          medico_id: '',
-          nome_paciente: '',
-          data_cirurgia: '',
-          tipo_procedimento_detalhado: 'consulta',
-          valor: '',
-          month_reference: selectedMonth,
-          observacao: ''
-        });
-
-        setShowForm(false);
-        loadData();
-      }
-    } catch (error) {
-      console.error('Erro ao salvar:', error);
-    }
-    setLoading(false);
-  };
-
-  const handleEdit = (repasse: Repasse) => {
-    setEditingRepasse(repasse);
-  };
-
-  const handleDelete = async (id: number) => {
-    setDeletingId(id);
-  };
-
-  const confirmDelete = async () => {
-    if (!deletingId) return;
-
-    setDeleteLoading(true);
-    try {
-      const result = await dbHelpers.deleteRepasse(deletingId);
-      if (!result.error) {
-        loadData();
-        setDeletingId(null);
-      }
-    } catch (error) {
-      console.error('Erro ao excluir:', error);
-    }
-    setDeleteLoading(false);
-  };
-
-  const handleNew = () => {
+  const openNew = () => {
+    setEditing(null);
+    setForm(initialForm(selectedMonth));
     setShowForm(true);
-    setActiveView('form');
+    setError('');
   };
 
-  const hasParticularAccess = user?.email === 'rayannyrego@gmail.com';
+  const openEdit = (repasse: Repasse) => {
+    setEditing(repasse);
+    setForm({
+      medico_id: String(repasse.medico_id),
+      hospital_id: String(repasse.hospital_id),
+      nome_paciente: repasse.nome_paciente,
+      data_cirurgia: repasse.data_cirurgia,
+      tipo: repasse.tipo,
+      valor: String(repasse.valor),
+      auxilio_1: String(repasse.auxilio_1 || 0),
+      auxilio_2: String(repasse.auxilio_2 || 0),
+      taxa_1_5: String(repasse.taxa_1_5 || 0),
+      imposto_percentual: String(repasse.imposto_percentual ?? 12),
+      outras_deducoes: String(repasse.outras_deducoes || 0),
+      observacao: repasse.observacao || '',
+      month_reference: repasse.month_reference || selectedMonth,
+      status_pagamento: repasse.status_pagamento || 'pendente',
+    });
+    setShowForm(true);
+  };
 
-  const filteredRepasses = repasses.filter(repasse =>
-    activeTab === 'convenio' ? !repasse.is_particular : repasse.is_particular
-  );
-
-  const getTipoProcedimentoLabel = (tipo?: string) => {
-    const labels: { [key: string]: string } = {
-      'consulta': 'Consulta (16,33%)',
-      'infiltracao': 'Infiltração (40%)',
-      'onda_choque': 'Onda de Choque (30%)',
-      'cirurgia_particular': 'Cirurgia Particular (2%)',
-      'medico_parceiro': 'Médico Parceiro (50%)'
+  const saveRepasse = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    const valor = toNumber(form.valor);
+    const valorLiquido = calculateNet(form, tipo);
+    const payload = {
+      medico_id: Number(form.medico_id),
+      hospital_id: Number(form.hospital_id),
+      nome_paciente: form.nome_paciente.trim(),
+      data_cirurgia: form.data_cirurgia,
+      valor,
+      tipo: form.tipo,
+      is_particular: tipo === 'socio',
+      tipo_procedimento_detalhado: tipo === 'socio' ? 'consulta' : 'medico_parceiro',
+      valor_repasse_medico: valorLiquido,
+      month_reference: form.month_reference,
+      observacao: form.observacao.trim() || null,
+      destinatario_tipo: tipo,
+      auxilio_1: toNumber(form.auxilio_1),
+      auxilio_2: toNumber(form.auxilio_2),
+      taxa_1_5: toNumber(form.taxa_1_5),
+      imposto_percentual: tipo === 'socio' ? toNumber(form.imposto_percentual) : 0,
+      outras_deducoes: toNumber(form.outras_deducoes),
+      valor_liquido: valorLiquido,
+      status_pagamento: form.status_pagamento,
+      data_pagamento: form.status_pagamento === 'pago' ? new Date().toISOString().slice(0, 10) : null,
     };
-    return labels[tipo || ''] || tipo || '-';
+    const result = editing
+      ? await dbHelpers.updateRepasse(editing.id, payload)
+      : await dbHelpers.createRepasse(payload);
+    if (result.error) {
+      setError('Não foi possível salvar o repasse. Confira os campos e tente novamente.');
+    } else {
+      setShowForm(false);
+      await loadData();
+    }
+    setSaving(false);
   };
 
-  if (activeView === 'report') {
-    return (
-      <div className="space-y-6">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveView('form')}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-          >
-            ← Voltar ao Formulário
-          </button>
-        </div>
+  const removeRepasse = async (id: number) => {
+    if (!window.confirm('Excluir este lançamento de repasse?')) return;
+    const result = await dbHelpers.deleteRepasse(id);
+    if (result.error) setError('Não foi possível excluir o lançamento.');
+    else await loadData();
+  };
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('convenio')}
-              className={`py-3 px-6 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                activeTab === 'convenio'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <Building size={16} />
-              Repasse por Convênio
-            </button>
-            {hasParticularAccess && (
-              <button
-                onClick={() => setActiveTab('particular')}
-                className={`py-3 px-6 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                  activeTab === 'particular'
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <UserCheck size={16} />
-                Repasse Particular
-              </button>
-            )}
-          </nav>
-        </div>
+  const filteredRepasses = useMemo(() => repasses.filter((repasse) => {
+    const text = `${repasse.nome_paciente} ${repasse.medico?.nome || ''}`.toLowerCase();
+    return text.includes(search.toLowerCase()) &&
+      (statusFilter === 'todos' || repasse.status_pagamento === statusFilter) &&
+      (!medicoFilter || String(repasse.medico_id) === medicoFilter);
+  }), [repasses, search, statusFilter, medicoFilter]);
 
-        <RepasseReport
-          activeTab={activeTab}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onNew={handleNew}
-          hasParticularAccess={hasParticularAccess}
-          selectedMonth={selectedMonth}
-        />
+  const totals = useMemo(() => filteredRepasses.reduce((acc, item) => ({
+    bruto: acc.bruto + Number(item.valor || 0),
+    liquido: acc.liquido + Number(item.valor_liquido || item.valor_repasse_medico || 0),
+    descontos: acc.descontos + Number(item.taxa_1_5 || 0) + Number(item.outras_deducoes || 0) + (tipo === 'socio' ? Number(item.valor || 0) * Number(item.imposto_percentual || 0) / 100 : 0),
+  }), { bruto: 0, liquido: 0, descontos: 0 }), [filteredRepasses, tipo]);
 
-        <EditRepasseModal
-          repasse={editingRepasse}
-          isOpen={!!editingRepasse}
-          onClose={() => setEditingRepasse(null)}
-          onSave={loadData}
-        />
-
-        <ConfirmDeleteModal
-          isOpen={!!deletingId}
-          onClose={() => setDeletingId(null)}
-          onConfirm={confirmDelete}
-          title="Excluir Repasse"
-          message="Tem certeza que deseja excluir este registro de repasse? Esta ação não pode ser desfeita."
-          loading={deleteLoading}
-        />
-      </div>
-    );
-  }
+  const updateForm = (field: keyof FormData, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const previewNet = calculateNet(form, tipo);
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-r from-green-500 to-green-600 p-2 rounded-lg">
-            <CreditCard className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Controle de Repasse</h2>
-
-            <div className="relative mt-1">
-              <button
-                onClick={() => setShowMonthSelector(!showMonthSelector)}
-                className="flex items-center gap-2 px-3 py-1 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Calendar className="h-4 w-4 text-gray-600" />
-                <span className="font-medium text-gray-700">
-                  {formatSelectedMonth(selectedMonth)}
-                </span>
-                {showMonthSelector ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </button>
-
-              {showMonthSelector && (
-                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10 w-48">
-                  {generateMonthOptions().map(month => (
-                    <button
-                      key={month.value}
-                      onClick={() => {
-                        setSelectedMonth(month.value);
-                        setShowMonthSelector(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors ${
-                        month.value === selectedMonth
-                          ? 'bg-blue-100 text-blue-700 font-medium'
-                          : 'text-gray-700'
-                      }`}
-                    >
-                      {month.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+      <section className="hero-panel">
+        <div>
+          <div className="eyebrow"><ReceiptText size={15} /> Financeiro médico</div>
+          <h1>Controle de repasses</h1>
+          <p>Registre, confira e acompanhe os pagamentos por competência.</p>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setActiveView('report')}
-            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-          >
-            <BarChart3 size={20} />
-            Relatório
-          </button>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-          >
-            <Plus size={20} />
-            Novo Repasse
-          </button>
+        <div className="hero-actions">
+          <label className="month-picker">
+            <CalendarDays size={16} />
+            <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
+              {monthOptions().map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}
+            </select>
+          </label>
+          <button className="button button-light" onClick={openNew}><Plus size={18} /> Novo repasse</button>
         </div>
+      </section>
+
+      <div className="segmented-tabs">
+        <button className={tipo === 'terceiro' ? 'active' : ''} onClick={() => setTipo('terceiro')}><Users size={17} /> Repasse a terceiros</button>
+        <button className={tipo === 'socio' ? 'active' : ''} onClick={() => setTipo('socio')}><CircleDollarSign size={17} /> Repasse para sócio</button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('convenio')}
-            className={`py-3 px-6 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-              activeTab === 'convenio'
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <Building size={16} />
-            Repasse por Convênio
-          </button>
-          {hasParticularAccess && (
-            <button
-              onClick={() => setActiveTab('particular')}
-              className={`py-3 px-6 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                activeTab === 'particular'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <UserCheck size={16} />
-              Repasse Particular
-            </button>
-          )}
-        </nav>
-      </div>
+      <section className="summary-grid">
+        <div className="summary-card summary-blue"><span>Valor bruto</span><strong>{money(totals.bruto)}</strong><small>{filteredRepasses.length} lançamentos no período</small><ArrowUpRight /></div>
+        <div className="summary-card summary-green"><span>Valor líquido</span><strong>{money(totals.liquido)}</strong><small>Pronto para conferência</small><Check /></div>
+        <div className="summary-card summary-amber"><span>Descontos</span><strong>{money(totals.descontos)}</strong><small>{tipo === 'socio' ? 'Taxa, imposto e outras deduções' : 'Taxas e outras deduções'}</small><ArrowDownRight /></div>
+      </section>
+
+      <section className="filter-panel">
+        <div className="filter-heading"><Filter size={17} /><strong>Filtrar lançamentos</strong></div>
+        <div className="filter-grid">
+          <label className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar médico ou paciente" /></label>
+          <select value={medicoFilter} onChange={(event) => setMedicoFilter(event.target.value)}><option value="">Todos os médicos</option>{medicos.map((medico) => <option key={medico.id} value={medico.id}>{medico.nome}</option>)}</select>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'todos' | StatusPagamento)}><option value="todos">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select>
+        </div>
+      </section>
+
+      {error && <div className="alert-error">{error}</div>}
 
       {showForm && (
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-          <div className="flex items-center gap-2 mb-6">
-            {activeTab === 'convenio' ? (
-              <Building className="h-5 w-5 text-blue-600" />
-            ) : (
-              <UserCheck className="h-5 w-5 text-green-600" />
-            )}
-            <h3 className="text-lg font-semibold text-gray-900">
-              Novo Repasse {activeTab === 'convenio' ? 'por Convênio' : 'Particular'}
-            </h3>
-          </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  Mês de Referência
-                </div>
-              </label>
-              <select
-                value={activeTab === 'convenio' ? formDataConvenio.month_reference : formData.month_reference}
-                onChange={(e) => {
-                  if (activeTab === 'convenio') {
-                    setFormDataConvenio(prev => ({ ...prev, month_reference: e.target.value }));
-                  } else {
-                    setFormData(prev => ({ ...prev, month_reference: e.target.value }));
-                  }
-                }}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Selecione o mês de referência</option>
-                {generateMonthOptions().map(month => (
-                  <option key={month.value} value={month.value}>
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Mês ao qual este repasse será contabilizado
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Médico
-              </label>
-              <select
-                value={activeTab === 'convenio' ? formDataConvenio.medico_id : formData.medico_id}
-                onChange={(e) => {
-                  if (activeTab === 'convenio') {
-                    setFormDataConvenio(prev => ({ ...prev, medico_id: e.target.value }));
-                  } else {
-                    setFormData(prev => ({ ...prev, medico_id: e.target.value }));
-                  }
-                }}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              >
-                <option value="">Selecione o médico</option>
-                {medicos.map(medico => (
-                  <option key={medico.id} value={medico.id}>{medico.nome}</option>
-                ))}
-              </select>
-            </div>
-
-            {activeTab === 'convenio' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Convênio
-                </label>
-                <select
-                  value={formDataConvenio.convenio_id}
-                  onChange={(e) => setFormDataConvenio(prev => ({ ...prev, convenio_id: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                  required
-                >
-                  <option value="">Selecione o convênio</option>
-                  {convenios.map(convenio => (
-                    <option key={convenio.id} value={convenio.id}>{convenio.nome}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {activeTab === 'particular' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <Stethoscope size={16} />
-                    Tipo de Procedimento
-                  </div>
-                </label>
-                <select
-                  value={formData.tipo_procedimento_detalhado}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tipo_procedimento_detalhado: e.target.value as any }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                  required
-                >
-                  <option value="consulta">Consulta (16,33%)</option>
-                  <option value="infiltracao">Infiltração (40%)</option>
-                  <option value="onda_choque">Onda de Choque (30%)</option>
-                  <option value="cirurgia_particular">Cirurgia Particular (2%)</option>
-                  <option value="medico_parceiro">Médico Parceiro (50%)</option>
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nome do Paciente
-              </label>
-              <input
-                type="text"
-                value={activeTab === 'convenio' ? formDataConvenio.nome_paciente : formData.nome_paciente}
-                onChange={(e) => {
-                  if (activeTab === 'convenio') {
-                    setFormDataConvenio(prev => ({ ...prev, nome_paciente: e.target.value }));
-                  } else {
-                    setFormData(prev => ({ ...prev, nome_paciente: e.target.value }));
-                  }
-                }}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              />
-            </div>
-
-            {activeTab === 'convenio' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hospital
-                </label>
-                <select
-                  value={formDataConvenio.hospital_id}
-                  onChange={(e) => setFormDataConvenio(prev => ({ ...prev, hospital_id: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                  required
-                >
-                  <option value="">Selecione o hospital</option>
-                  {hospitais.map(hospital => (
-                    <option key={hospital.id} value={hospital.id}>{hospital.nome}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Data da Cirurgia
-              </label>
-              <input
-                type="date"
-                value={activeTab === 'convenio' ? formDataConvenio.data_cirurgia : formData.data_cirurgia}
-                onChange={(e) => {
-                  if (activeTab === 'convenio') {
-                    setFormDataConvenio(prev => ({ ...prev, data_cirurgia: e.target.value }));
-                  } else {
-                    setFormData(prev => ({ ...prev, data_cirurgia: e.target.value }));
-                  }
-                }}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              />
-            </div>
-
-            {activeTab === 'convenio' ? (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipo
-                  </label>
-                  <select
-                    value={formDataConvenio.tipo}
-                    onChange={(e) => setFormDataConvenio(prev => ({ ...prev, tipo: e.target.value as 'consulta' | 'cirurgia' }))}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                    required
-                  >
-                    <option value="consulta">Consulta</option>
-                    <option value="cirurgia">Cirurgia</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Valor
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formDataConvenio.valor}
-                    onChange={(e) => setFormDataConvenio(prev => ({ ...prev, valor: e.target.value }))}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                    required
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Valor Total
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.valor}
-                    onChange={(e) => setFormData(prev => ({ ...prev, valor: e.target.value }))}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                    required
-                  />
-                  {formData.valor && (
-                    <p className="text-xs text-green-600 mt-1">
-                      Repasse: R$ {calcularValoresRepasse(formData.tipo_procedimento_detalhado, parseFloat(formData.valor || '0')).valorRepasse.toFixed(2)}
-                    </p>
-                  )}
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Observação (Opcional)
-                  </label>
-                  <textarea
-                    value={formData.observacao}
-                    onChange={(e) => setFormData(prev => ({ ...prev, observacao: e.target.value }))}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                    rows={3}
-                    placeholder="Adicione observações sobre este repasse..."
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="md:col-span-2 flex gap-3 pt-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Salvando...' : 'Salvar Repasse'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-            </div>
+        <section className="form-panel">
+          <div className="section-title"><div><span className="eyebrow">{editing ? 'Editar lançamento' : 'Novo lançamento'}</span><h2>{tipo === 'socio' ? 'Repasse para sócio' : 'Repasse a terceiro'}</h2></div><button className="icon-button" onClick={() => setShowForm(false)}><X size={18} /></button></div>
+          <form onSubmit={saveRepasse} className="form-grid">
+            <label>Mês de referência<select required value={form.month_reference} onChange={(event) => updateForm('month_reference', event.target.value)}>{monthOptions().map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}</select></label>
+            <label>Médico<select required value={form.medico_id} onChange={(event) => updateForm('medico_id', event.target.value)}><option value="">Selecione</option>{medicos.map((medico) => <option key={medico.id} value={medico.id}>{medico.nome}</option>)}</select></label>
+            <label>Hospital / clínica<select required value={form.hospital_id} onChange={(event) => updateForm('hospital_id', event.target.value)}><option value="">Selecione</option>{hospitais.map((hospital) => <option key={hospital.id} value={hospital.id}>{hospital.nome}</option>)}</select></label>
+            <label>Paciente<input required value={form.nome_paciente} onChange={(event) => updateForm('nome_paciente', event.target.value)} placeholder="Nome do paciente" /></label>
+            <label>Data do atendimento<input required type="date" value={form.data_cirurgia} onChange={(event) => updateForm('data_cirurgia', event.target.value)} /></label>
+            <label>Tipo<select value={form.tipo} onChange={(event) => updateForm('tipo', event.target.value)}><option value="consulta">Consulta</option><option value="cirurgia">Cirurgia</option></select></label>
+            <label>Valor bruto<input required min="0" step="0.01" type="number" value={form.valor} onChange={(event) => updateForm('valor', event.target.value)} placeholder="0,00" /></label>
+            <label>Auxílio 1<input min="0" step="0.01" type="number" value={form.auxilio_1} onChange={(event) => updateForm('auxilio_1', event.target.value)} /></label>
+            <label>Auxílio 2<input min="0" step="0.01" type="number" value={form.auxilio_2} onChange={(event) => updateForm('auxilio_2', event.target.value)} /></label>
+            <label>Taxa de 1,5%<input min="0" step="0.01" type="number" value={form.taxa_1_5} onChange={(event) => updateForm('taxa_1_5', event.target.value)} /></label>
+            {tipo === 'socio' && <label>Imposto (%)<input min="0" step="0.01" type="number" value={form.imposto_percentual} onChange={(event) => updateForm('imposto_percentual', event.target.value)} /></label>}
+            <label>Outras deduções<input min="0" step="0.01" type="number" value={form.outras_deducoes} onChange={(event) => updateForm('outras_deducoes', event.target.value)} /></label>
+            <label>Status<select value={form.status_pagamento} onChange={(event) => updateForm('status_pagamento', event.target.value)}><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select></label>
+            <label className="wide">Observação<textarea rows={3} value={form.observacao} onChange={(event) => updateForm('observacao', event.target.value)} placeholder="Detalhes do lançamento, descontos ou referência do relatório" /></label>
+            <div className="calculation-card wide"><div><span>Valor líquido calculado</span><strong>{money(previewNet)}</strong></div><small>{tipo === 'socio' ? 'Bruto + auxílios - taxa - imposto - outras deduções' : 'Bruto + auxílios - taxa - outras deduções'}</small></div>
+            <div className="form-actions wide"><button type="button" className="button button-muted" onClick={() => setShowForm(false)}>Cancelar</button><button className="button button-primary" disabled={saving}>{saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Salvar repasse'}</button></div>
           </form>
-        </div>
+        </section>
       )}
 
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Repasses {activeTab === 'convenio' ? 'por Convênio' : 'Particulares'} de {formatSelectedMonth(selectedMonth)}
-          </h3>
+      <section className="table-panel">
+        <div className="section-title"><div><span className="eyebrow">Competência selecionada</span><h2>{formatMonth(selectedMonth)}</h2></div><button className="button button-muted" onClick={() => window.print()}><FileDown size={17} /> Imprimir</button></div>
+        <div className="table-wrap">
+          <table><thead><tr><th>Médico</th><th>Paciente</th><th>Atendimento</th><th>Bruto</th><th>Descontos</th><th>Líquido</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>{loading ? <tr><td colSpan={8} className="empty-state">Carregando lançamentos...</td></tr> : filteredRepasses.length === 0 ? <tr><td colSpan={8} className="empty-state"><ClipboardList size={32} /><strong>Nenhum lançamento encontrado</strong><span>Cadastre um repasse para começar o controle desta competência.</span></td></tr> : filteredRepasses.map((repasse) => {
+              const descontos = Number(repasse.taxa_1_5 || 0) + Number(repasse.outras_deducoes || 0) + (tipo === 'socio' ? Number(repasse.valor || 0) * Number(repasse.imposto_percentual || 0) / 100 : 0);
+              return <tr key={repasse.id}><td><strong>{repasse.medico?.nome || 'Médico não informado'}</strong>{repasse.medico?.crm && <small>CRM {repasse.medico.crm}</small>}</td><td>{repasse.nome_paciente}</td><td><span className="type-pill">{repasse.tipo === 'cirurgia' ? 'Cirurgia' : 'Consulta'}</span><small>{formatDate(repasse.data_cirurgia)}</small></td><td>{money(repasse.valor)}</td><td className="negative">{money(descontos)}</td><td className="positive strong">{money(repasse.valor_liquido || repasse.valor_repasse_medico || 0)}</td><td><span className={`status-pill status-${repasse.status_pagamento || 'pendente'}`}>{repasse.status_pagamento === 'pago' ? 'Pago' : repasse.status_pagamento === 'aprovado' ? 'Aprovado' : 'Pendente'}</span></td><td><div className="row-actions"><button className="icon-button" onClick={() => openEdit(repasse)} title="Editar"><Pencil size={16} /></button><button className="icon-button danger" onClick={() => void removeRepasse(repasse.id)} title="Excluir"><Trash2 size={16} /></button></div></td></tr>;
+            })}</tbody></table>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Médico</th>
-                {activeTab === 'convenio' && (
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Convênio</th>
-                )}
-                {activeTab === 'particular' && (
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Tipo Procedimento</th>
-                )}
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Paciente</th>
-                {activeTab === 'convenio' && (
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Hospital</th>
-                )}
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Data</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Valor Total</th>
-                {activeTab === 'particular' && (
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Valor Repasse</th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredRepasses.map((repasse, index) => (
-                <tr key={repasse.id} className={`transition-colors duration-150 hover:bg-blue-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                  <td className="px-6 py-4 flex items-center gap-3">
-                    <div className="bg-blue-100 p-1.5 rounded-full">
-                      <User size={14} className="text-blue-600" />
-                    </div>
-                    <span className="font-medium text-gray-900">{repasse.medico?.nome}</span>
-                  </td>
-                  {activeTab === 'convenio' && (
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-green-100 p-1.5 rounded-full">
-                          <Building size={14} className="text-green-600" />
-                        </div>
-                        <span className="text-gray-700">{repasse.convenio?.nome}</span>
-                      </div>
-                    </td>
-                  )}
-                  {activeTab === 'particular' && (
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-gray-700 font-medium">
-                        {getTipoProcedimentoLabel(repasse.tipo_procedimento_detalhado)}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-6 py-4 text-gray-700">{repasse.nome_paciente}</td>
-                  {activeTab === 'convenio' && (
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-orange-100 p-1.5 rounded-full">
-                          <Hospital size={14} className="text-orange-600" />
-                        </div>
-                        <span className="text-gray-700">{repasse.hospital?.nome}</span>
-                      </div>
-                    </td>
-                  )}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Calendar size={14} className="text-gray-400" />
-                      <span className="text-gray-700">{new Date(repasse.data_cirurgia).toLocaleDateString('pt-BR')}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="font-bold text-gray-900 text-lg">R$ {repasse.valor.toFixed(2)}</span>
-                  </td>
-                  {activeTab === 'particular' && (
-                    <td className="px-6 py-4">
-                      <span className="font-bold text-green-600 text-lg">
-                        R$ {(repasse.valor_repasse_medico || 0).toFixed(2)}
-                      </span>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </section>
     </div>
   );
-};
+}

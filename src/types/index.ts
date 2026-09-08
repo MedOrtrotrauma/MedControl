@@ -26,10 +26,14 @@ export interface ProducaoMensal {
   data_consulta: string;
   valor: number;
   tipo: 'consulta' | 'cirurgia';
+  month_reference?: string;
   created_at?: string;
   medico?: Medico;
   convenio?: Convenio;
 }
+
+export type DestinatarioTipo = 'terceiro' | 'socio';
+export type StatusPagamento = 'pendente' | 'aprovado' | 'pago';
 
 export interface Repasse {
   id: number;
@@ -51,6 +55,15 @@ export interface Repasse {
   valor_unitario?: number;
   month_reference?: string;
   observacao?: string;
+  destinatario_tipo: DestinatarioTipo;
+  auxilio_1: number;
+  auxilio_2: number;
+  taxa_1_5: number;
+  imposto_percentual: number;
+  outras_deducoes: number;
+  valor_liquido: number;
+  status_pagamento: StatusPagamento;
+  data_pagamento?: string;
   created_at?: string;
   medico?: Medico;
   convenio?: Convenio;

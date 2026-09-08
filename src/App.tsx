@@ -1,203 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, FileText, Database, Stethoscope, LogOut, User, UserCheck, Building, Building2 } from 'lucide-react';
-import { ProducaoMensalComponent } from './components/ProducaoMensal';
+import { useState } from 'react';
+import {
+  BarChart3,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  CircleDollarSign,
+  ClipboardList,
+  LogOut,
+  Menu,
+  Settings2,
+  Stethoscope,
+  UserRound,
+  UsersRound,
+  X,
+} from 'lucide-react';
 import { RepasseComponent } from './components/Repasse';
+import { ProducaoMensalComponent } from './components/ProducaoMensal';
 import { MedicosCadastro } from './components/Cadastros/MedicosCadastro';
 import { ConveniosCadastro } from './components/Cadastros/ConveniosCadastro';
 import { HospitaisCadastro } from './components/Cadastros/HospitaisCadastro';
-import { DatabaseSetup } from './components/DatabaseSetup';
 import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
-import { supabase } from './lib/supabase';
+
+type Page = 'overview' | 'repasses' | 'producao' | 'medicos' | 'convenios' | 'hospitais';
+
+const menuGroups = [
+  { label: 'Visão geral', items: [{ id: 'overview' as Page, label: 'Resumo financeiro', icon: BarChart3 }] },
+  { label: 'Operação', items: [{ id: 'repasses' as Page, label: 'Repasses médicos', icon: CircleDollarSign }, { id: 'producao' as Page, label: 'Produção mensal', icon: ClipboardList }] },
+  { label: 'Cadastros', items: [{ id: 'medicos' as Page, label: 'Médicos', icon: UserRound }, { id: 'convenios' as Page, label: 'Convênios', icon: Building2 }, { id: 'hospitais' as Page, label: 'Hospitais e clínicas', icon: Building2 }] },
+];
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<'producao' | 'repasse' | 'medicos' | 'convenios' | 'hospitais'>('producao');
-  const [supabaseConnected, setSupabaseConnected] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const { user, signOut } = useAuth();
+  const { user, loading, signOut } = useAuth();
+  const [page, setPage] = useState<Page>('repasses');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => {
-    checkSupabaseConnection();
-  }, []);
+  if (loading) return <div className="loading-screen"><div className="loading-mark"><Stethoscope size={24} /></div><span>Carregando seu espaço financeiro...</span></div>;
+  if (!user) return <LoginForm />;
 
-  const checkSupabaseConnection = async () => {
-    try {
-      const { data, error } = await supabase.from('medicos').select('count').single();
-      setSupabaseConnected(!error);
-    } catch (error) {
-      setSupabaseConnected(false);
-    }
-    setLoading(false);
+  const pageTitle = page === 'overview' ? 'Resumo financeiro' : page === 'repasses' ? 'Repasses médicos' : page === 'producao' ? 'Produção mensal' : page === 'medicos' ? 'Médicos' : page === 'convenios' ? 'Convênios' : 'Hospitais e clínicas';
+
+  const renderPage = () => {
+    if (page === 'repasses') return <RepasseComponent />;
+    if (page === 'producao') return <ProducaoMensalComponent />;
+    if (page === 'medicos') return <MedicosCadastro />;
+    if (page === 'convenios') return <ConveniosCadastro />;
+    if (page === 'hospitais') return <HospitaisCadastro />;
+    return <Overview onNavigate={setPage} />;
   };
 
-  const handleSignOut = async () => {
-    await signOut();
+  const navigate = (nextPage: Page) => {
+    setPage(nextPage);
+    setSidebarOpen(false);
   };
-
-  if (!user) {
-    return <LoginForm />;
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (!supabaseConnected) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-3">
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-lg shadow-lg">
-                  <Stethoscope className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">MedControl Pro</h1>
-                  <p className="text-sm text-gray-600">Sistema de Controle de Repasse Médico</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <User size={16} />
-                  {user.email}
-                </div>
-                <button
-                  onClick={handleSignOut}
-                  className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-                >
-                  <LogOut size={16} />
-                  Sair
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <DatabaseSetup />
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-lg shadow-lg">
-                <Stethoscope className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">MedControl Pro</h1>
-                <p className="text-sm text-gray-600">Sistema de Controle de Repasse Médico</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <User size={16} />
-                {user.email}
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-              >
-                <LogOut size={16} />
-                Sair
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('producao')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                activeTab === 'producao'
-                  ? 'border-blue-500 text-blue-600 bg-blue-50 rounded-t-lg px-4'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <FileText size={20} />
-              Produção Mensal
-            </button>
-            <button
-              onClick={() => setActiveTab('repasse')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                activeTab === 'repasse'
-                  ? 'border-blue-500 text-blue-600 bg-blue-50 rounded-t-lg px-4'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Database size={20} />
-              Repasse
-            </button>
-            <button
-              onClick={() => setActiveTab('medicos')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                activeTab === 'medicos'
-                  ? 'border-blue-500 text-blue-600 bg-blue-50 rounded-t-lg px-4'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <UserCheck size={20} />
-              Médicos
-            </button>
-            <button
-              onClick={() => setActiveTab('convenios')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                activeTab === 'convenios'
-                  ? 'border-blue-500 text-blue-600 bg-blue-50 rounded-t-lg px-4'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Building size={20} />
-              Convênios
-            </button>
-            <button
-              onClick={() => setActiveTab('hospitais')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-all duration-200 ${
-                activeTab === 'hospitais'
-                  ? 'border-blue-500 text-blue-600 bg-blue-50 rounded-t-lg px-4'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Building2 size={20} />
-              Hospitais
-            </button>
-          </nav>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'producao' && <ProducaoMensalComponent />}
-        {activeTab === 'repasse' && <RepasseComponent />}
-        {activeTab === 'medicos' && <MedicosCadastro />}
-        {activeTab === 'convenios' && <ConveniosCadastro />}
-        {activeTab === 'hospitais' && <HospitaisCadastro />}
-      </div>
+    <div className="app-shell">
+      {sidebarOpen && <button className="sidebar-backdrop" aria-label="Fechar menu" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${sidebarOpen ? 'mobile-open' : ''}`}>
+        <div className="brand"><div className="brand-mark"><Stethoscope size={21} /></div>{!collapsed && <div><strong>MedControl</strong><span>Gestão médica</span></div>}<button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
+        <div className="sidebar-caption">{!collapsed && 'MENU PRINCIPAL'}</div>
+        <nav>{menuGroups.map((group) => <div className="menu-group" key={group.label}>{!collapsed && <span className="menu-label">{group.label}</span>}{group.items.map((item) => <button key={item.id} className={`menu-item ${page === item.id ? 'active' : ''}`} onClick={() => navigate(item.id)} title={collapsed ? item.label : undefined}><item.icon size={18} />{!collapsed && <span>{item.label}</span>}</button>)}</div>)}</nav>
+        <div className="sidebar-bottom">{!collapsed && <div className="account-card"><div className="avatar"><UsersRound size={16} /></div><div><strong>Conta ativa</strong><span>{user.email}</span></div></div>}<button className="menu-item" onClick={() => void signOut()}><LogOut size={18} />{!collapsed && <span>Sair</span>}</button></div>
+        <button className="collapse-button" onClick={() => setCollapsed((value) => !value)}>{collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}</button>
+      </aside>
+      <main className="main-area">
+        <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button><div><span className="breadcrumb">MedControl / {pageTitle}</span><h2>{pageTitle}</h2></div><div className="topbar-actions"><span className="secure-badge"><Settings2 size={15} /> Ambiente seguro</span><div className="top-avatar"><UserRound size={16} /></div></div></header>
+        <div className="content-area">{renderPage()}</div>
+      </main>
     </div>
   );
 }
 
-function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
+function Overview({ onNavigate }: { onNavigate: (page: Page) => void }) {
+  return <div className="overview-page"><section className="overview-hero"><div><span className="eyebrow">Painel de controle</span><h1>Tenha clareza sobre cada repasse.</h1><p>Organize terceiros e sócios em um único fluxo, com descontos e valores líquidos separados.</p></div><button className="button button-light" onClick={() => onNavigate('repasses')}><CircleDollarSign size={18} /> Abrir repasses</button></section><div className="overview-grid"><button onClick={() => onNavigate('repasses')} className="overview-card"><div className="overview-icon blue"><CircleDollarSign size={21} /></div><strong>Repasses médicos</strong><span>Controle terceiros, sócios, descontos e pagamentos.</span><b>Gerenciar agora <ChevronRight size={16} /></b></button><button onClick={() => onNavigate('producao')} className="overview-card"><div className="overview-icon green"><ClipboardList size={21} /></div><strong>Produção mensal</strong><span>Acompanhe consultas e cirurgias por competência.</span><b>Ver produção <ChevronRight size={16} /></b></button><button onClick={() => onNavigate('medicos')} className="overview-card"><div className="overview-icon amber"><UserRound size={21} /></div><strong>Cadastros de apoio</strong><span>Mantenha médicos, convênios e hospitais atualizados.</span><b>Ver cadastros <ChevronRight size={16} /></b></button></div></div>;
 }
 
-export default App;
+export default function App() {
+  return <AuthProvider><AppContent /></AuthProvider>;
+}
