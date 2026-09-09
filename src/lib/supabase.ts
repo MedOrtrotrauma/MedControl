@@ -342,5 +342,44 @@ export const dbHelpers = {
       .delete()
       .eq('id', id);
     return { data, error };
+  },
+
+  // Repasse Imagem
+  async getRepassesImagemByMonth(month: string) {
+    const { data, error } = await supabase
+      .from('repasses_imagem')
+      .select(`
+        *,
+        hospital:hospitais(*),
+        medico:medicos(*)
+      `)
+      .eq('month_reference', month)
+      .order('created_at', { ascending: false });
+    return { data, error };
+  },
+
+  async createRepasseImagem(repasse: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('repasses_imagem')
+      .insert([repasse])
+      .select();
+    return { data, error };
+  },
+
+  async updateRepasseImagem(id: number, repasse: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('repasses_imagem')
+      .update(repasse)
+      .eq('id', id)
+      .select();
+    return { data, error };
+  },
+
+  async deleteRepasseImagem(id: number) {
+    const { data, error } = await supabase
+      .from('repasses_imagem')
+      .delete()
+      .eq('id', id);
+    return { data, error };
   }
 };

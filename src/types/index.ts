@@ -31,6 +31,18 @@ export interface Procedimento {
   created_at?: string;
 }
 
+export interface RepasseImagem {
+  id: number;
+  month_reference: string;
+  hospital_id: number;
+  medico_id: number;
+  total: number;
+  imposto_percentual: number;
+  created_at?: string;
+  hospital?: Hospital;
+  medico?: Medico;
+}
+
 export interface ProducaoMensal {
   id: number;
   medico_id: number;
