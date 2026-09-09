@@ -218,6 +218,20 @@ export const dbHelpers = {
     return { data, error };
   },
 
+  async getRepassesParticularByMonth(month: string) {
+    const { data, error } = await supabase
+      .from('repasses')
+      .select(`
+        *,
+        medico:medicos(*),
+        hospital:hospitais(*)
+      `)
+      .eq('month_reference', month)
+      .eq('is_particular', true)
+      .order('data_cirurgia', { ascending: false });
+    return { data, error };
+  },
+
   async getRepassesByMedico(medicoId: number) {
     const { data, error } = await supabase
       .from('repasses')

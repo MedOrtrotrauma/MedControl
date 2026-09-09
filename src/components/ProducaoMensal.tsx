@@ -14,19 +14,22 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  Users
+  Users,
+  Trash2
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
-import { ProducaoMensal, Medico, Convenio } from '../types';
+import { ProducaoMensal, Medico, Convenio, Hospital, Repasse, StatusPagamento } from '../types';
 import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
 import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
 
 export const ProducaoMensalComponent: React.FC = () => {
   const [activeView, setActiveView] = useState<'form' | 'report'>('form');
+  const [tab, setTab] = useState<'convenios' | 'particular'>('convenios');
   const [producoes, setProducoes] = useState<ProducaoMensal[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [convenios, setConvenios] = useState<Convenio[]>([]);
+  const [hospitais, setHospitais] = useState<Hospital[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingProducao, setEditingProducao] = useState<ProducaoMensal | null>(null);
@@ -48,31 +51,167 @@ export const ProducaoMensalComponent: React.FC = () => {
   });
   const [showMonthSelector, setShowMonthSelector] = useState(false);
 
+  // === ESTADOS PARTICULAR ===
+  const [particulares, setParticulares] = useState<Repasse[]>([]);
+  const [particularLoading, setParticularLoading] = useState(false);
+  const [showParticularForm, setShowParticularForm] = useState(false);
+  const [editingParticular, setEditingParticular] = useState<Repasse | null>(null);
+  const [particularSearch, setParticularSearch] = useState('');
+  const [particularMedico, setParticularMedico] = useState('');
+
   // Carregar dados quando o mês selecionado mudar
   useEffect(() => {
     loadData();
+    loadParticulares();
   }, [selectedMonth]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // MODIFICADO: Carregar produções filtrando por month_reference
-      const [producaoRes, medicosRes, conveniosRes] = await Promise.all([
-        dbHelpers.getProducaoMensalByMonth(selectedMonth), // Nova função
+      const [producaoRes, medicosRes, conveniosRes, hospitaisRes] = await Promise.all([
+        dbHelpers.getProducaoMensalByMonth(selectedMonth),
         dbHelpers.getMedicos(),
-        dbHelpers.getConvenios()
+        dbHelpers.getConvenios(),
+        dbHelpers.getHospitais()
       ]);
-
-      console.log(`Dados carregados para ${selectedMonth}:`, producaoRes.data);
 
       if (producaoRes.data) setProducoes(producaoRes.data);
       if (medicosRes.data) setMedicos(medicosRes.data);
       if (conveniosRes.data) setConvenios(conveniosRes.data);
+      if (hospitaisRes.data) setHospitais(hospitaisRes.data);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
     setLoading(false);
   };
+
+  // === PARTICULAR: carregar, salvar, excluir ===
+  const loadParticulares = async () => {
+    setParticularLoading(true);
+    try {
+      const res = await dbHelpers.getRepassesParticularByMonth(selectedMonth);
+      if (res.data) setParticulares(res.data as Repasse[]);
+    } catch (error) {
+      console.error('Erro ao carregar particulares:', error);
+    }
+    setParticularLoading(false);
+  };
+
+  const particularFormInitial = () => ({
+    medico_id: '',
+    hospital_id: '',
+    nome_paciente: '',
+    data_cirurgia: '',
+    tipo: 'consulta' as 'consulta' | 'cirurgia',
+    tipo_procedimento: 'Consulta',
+    forma_pagamento: 'pix' as 'pix' | 'credito' | 'debito' | 'especie',
+    quantidade: '1',
+    valor: '',
+    desconto_paciente: '0',
+    desconto_cartao: '0',
+    valor_glosa: '0',
+    month_reference: selectedMonth,
+    observacao: '',
+    status_pagamento: 'pendente' as StatusPagamento,
+  });
+  const [particularForm, setParticularForm] = useState(particularFormInitial());
+
+  const openParticularNew = () => {
+    setEditingParticular(null);
+    setParticularForm(particularFormInitial());
+    setShowParticularForm(true);
+  };
+
+  const openParticularEdit = (item: Repasse) => {
+    setEditingParticular(item);
+    setParticularForm({
+      medico_id: String(item.medico_id),
+      hospital_id: String(item.hospital_id),
+      nome_paciente: item.nome_paciente,
+      data_cirurgia: item.data_cirurgia,
+      tipo: item.tipo,
+      tipo_procedimento: item.tipo_procedimento || 'Consulta',
+      forma_pagamento: (item.forma_pagamento || 'pix') as 'pix' | 'credito' | 'debito' | 'especie',
+      quantidade: String(item.quantidade || 1),
+      valor: String(item.valor || 0),
+      desconto_paciente: String(item.desconto_paciente || 0),
+      desconto_cartao: String(item.desconto_cartao || 0),
+      valor_glosa: String(item.valor_glosa || 0),
+      month_reference: item.month_reference || selectedMonth,
+      observacao: item.observacao || '',
+      status_pagamento: (item.status_pagamento || 'pendente') as StatusPagamento,
+    });
+    setShowParticularForm(true);
+  };
+
+  const num = (v: string) => Math.max(0, Number(v.replace(',', '.')) || 0);
+
+  const saveParticular = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!particularForm.medico_id || !particularForm.hospital_id || !particularForm.nome_paciente || !particularForm.data_cirurgia) {
+      alert('Preencha os campos obrigatórios: médico, hospital, paciente e data.');
+      return;
+    }
+    setParticularLoading(true);
+    const valor = num(particularForm.valor);
+    const global = Math.max(0, valor - num(particularForm.desconto_paciente) - num(particularForm.desconto_cartao) - num(particularForm.valor_glosa));
+    const payload = {
+      medico_id: Number(particularForm.medico_id),
+      hospital_id: Number(particularForm.hospital_id),
+      nome_paciente: particularForm.nome_paciente.trim(),
+      data_cirurgia: particularForm.data_cirurgia,
+      tipo: particularForm.tipo,
+      is_particular: true,
+      tipo_procedimento_detalhado: 'cirurgia_particular' as const,
+      tipo_procedimento: particularForm.tipo_procedimento,
+      forma_pagamento: particularForm.forma_pagamento,
+      quantidade: num(particularForm.quantidade),
+      valor: valor,
+      desconto_paciente: num(particularForm.desconto_paciente),
+      desconto_cartao: num(particularForm.desconto_cartao),
+      valor_glosa: num(particularForm.valor_glosa),
+      valor_recebido: global,
+      destinatario_tipo: 'socio' as const,
+      auxilio_1: 0, auxilio_2: 0, taxa_1_5: 0, imposto_percentual: 0, outras_deducoes: 0,
+      valor_liquido: global, percentual_terceiro: 0, valor_terceiro: 0, saldo_controle: 0,
+      month_reference: particularForm.month_reference,
+      observacao: particularForm.observacao.trim() || null,
+      status_pagamento: particularForm.status_pagamento,
+      data_pagamento: particularForm.status_pagamento === 'pago' ? new Date().toISOString().slice(0, 10) : null,
+    };
+    const result = editingParticular
+      ? await dbHelpers.updateRepasse(editingParticular.id, payload)
+      : await dbHelpers.createRepasse(payload);
+    if (result.error) {
+      alert('Erro ao salvar: ' + result.error.message);
+    } else {
+      setShowParticularForm(false);
+      await loadParticulares();
+    }
+    setParticularLoading(false);
+  };
+
+  const deleteParticular = async (id: number) => {
+    if (!window.confirm('Excluir este lançamento particular?')) return;
+    const result = await dbHelpers.deleteRepasse(id);
+    if (result.error) {
+      alert('Erro ao excluir: ' + result.error.message);
+    } else {
+      await loadParticulares();
+    }
+  };
+
+  const filteredParticulares = particulares.filter((item) => {
+    const text = `${item.nome_paciente} ${item.medico?.nome || ''}`.toLowerCase();
+    return text.includes(particularSearch.toLowerCase()) && (!particularMedico || String(item.medico_id) === particularMedico);
+  });
+
+  const particularTotal = filteredParticulares.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+  const particularGlobal = filteredParticulares.reduce((sum, item) => {
+    return sum + Math.max(0, Number(item.valor || 0) - Number(item.desconto_paciente || 0) - Number(item.desconto_cartao || 0) - Number(item.valor_glosa || 0));
+  }, 0);
+  const particularDescontos = particularTotal - particularGlobal;
+  const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 
   // Função para gerar opções de meses
   const generateMonthOptions = () => {
@@ -363,6 +502,36 @@ export const ProducaoMensalComponent: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* ABAS: Convênios / Particular */}
+      <div className="flex gap-2 border-b border-gray-200">
+        <button
+          onClick={() => setTab('convenios')}
+          className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${
+            tab === 'convenios'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Building size={18} className="inline mr-2" />
+          Convênios
+        </button>
+        <button
+          onClick={() => setTab('particular')}
+          className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${
+            tab === 'particular'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <User size={18} className="inline mr-2" />
+          Particular
+        </button>
+      </div>
+
+      {/* === ABA CONVÊNIOS === */}
+      {tab === 'convenios' && (
+      <>
 
       {/* MODIFICADO: Filtro por médico - ADICIONADOS NOVOS FILTROS */}
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
@@ -851,6 +1020,374 @@ export const ProducaoMensalComponent: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      </>
+
+      )}
+
+      {/* === ABA PARTICULAR === */}
+      {tab === 'particular' && (
+      <>
+
+      {/* Summary Cards - Particular */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-emerald-100 text-sm font-medium">Total Particular</p>
+              <p className="text-2xl font-bold">{money(particularTotal)}</p>
+              <p className="text-emerald-200 text-xs mt-1">{formatSelectedMonth(selectedMonth)}</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg">
+              <DollarSign className="h-6 w-6" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-teal-100 text-sm font-medium">Líquido (após descontos)</p>
+              <p className="text-2xl font-bold">{money(particularGlobal)}</p>
+              <p className="text-teal-200 text-xs mt-1">{filteredParticulares.length} lançamentos</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-amber-100 text-sm font-medium">Descontos</p>
+              <p className="text-2xl font-bold">{money(particularDescontos)}</p>
+              <p className="text-amber-200 text-xs mt-1">Paciente, cartão e glosa</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg">
+              <DollarSign className="h-6 w-6" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Botão Novo Lançamento Particular */}
+      <div className="flex justify-end">
+        <button
+          onClick={openParticularNew}
+          className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+        >
+          <Plus size={20} />
+          Novo Lançamento
+        </button>
+      </div>
+
+      {/* Filtros Particular */}
+      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+        <div className="flex items-center gap-4">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={particularSearch}
+              onChange={(e) => setParticularSearch(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent pl-10"
+              placeholder="Buscar por paciente ou médico..."
+            />
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+              <Search size={16} className="text-gray-400" />
+            </div>
+          </div>
+          <select
+            value={particularMedico}
+            onChange={(e) => setParticularMedico(e.target.value)}
+            className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          >
+            <option value="">Todos os médicos</option>
+            {medicos.map((m) => (
+              <option key={m.id} value={m.id}>{m.nome}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Modal Formulário Particular */}
+      {showParticularForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto p-4 pt-10" onClick={() => setShowParticularForm(false)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {editingParticular ? 'Editar Lançamento Particular' : 'Novo Lançamento Particular'}
+              </h3>
+              <button onClick={() => setShowParticularForm(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <form onSubmit={saveParticular} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mês de Referência *</label>
+                <select
+                  value={particularForm.month_reference}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, month_reference: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                >
+                  {generateMonthOptions().map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Médico *</label>
+                <select
+                  value={particularForm.medico_id}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, medico_id: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                >
+                  <option value="">Selecione o médico</option>
+                  {medicos.map((m) => (
+                    <option key={m.id} value={m.id}>{m.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Hospital / Clínica *</label>
+                <select
+                  value={particularForm.hospital_id}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, hospital_id: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {hospitais.map((h) => (
+                    <option key={h.id} value={h.id}>{h.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paciente *</label>
+                <input
+                  type="text"
+                  value={particularForm.nome_paciente}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, nome_paciente: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data do Atendimento *</label>
+                <input
+                  type="date"
+                  value={particularForm.data_cirurgia}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, data_cirurgia: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                <select
+                  value={particularForm.tipo}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, tipo: e.target.value as 'consulta' | 'cirurgia' }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="consulta">Consulta</option>
+                  <option value="cirurgia">Cirurgia</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Procedimento</label>
+                <input
+                  type="text"
+                  value={particularForm.tipo_procedimento}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, tipo_procedimento: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="Consulta, infiltração..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
+                <select
+                  value={particularForm.forma_pagamento}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, forma_pagamento: e.target.value as 'pix' | 'credito' | 'debito' | 'especie' }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="pix">Pix</option>
+                  <option value="credito">Crédito</option>
+                  <option value="debito">Débito</option>
+                  <option value="especie">Espécie</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={particularForm.quantidade}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, quantidade: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total *</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={particularForm.valor}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, valor: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desc. Paciente</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={particularForm.desconto_paciente}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, desconto_paciente: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desc. Cartão</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={particularForm.desconto_cartao}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, desconto_cartao: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Glosa</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={particularForm.valor_glosa}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, valor_glosa: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={particularForm.status_pagamento}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, status_pagamento: e.target.value as StatusPagamento }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="pendente">Pendente</option>
+                  <option value="aprovado">Aprovado</option>
+                  <option value="pago">Pago</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observação</label>
+                <textarea
+                  rows={2}
+                  value={particularForm.observacao}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, observacao: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="Opcional"
+                />
+              </div>
+              <div className="md:col-span-2 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowParticularForm(false)} className="px-6 py-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
+                <button type="submit" disabled={particularLoading} className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+                  {particularLoading ? 'Salvando...' : editingParticular ? 'Salvar Alterações' : 'Salvar Lançamento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Tabela Particular */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Médico</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paciente</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Procedimento</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forma Pagto</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Qtde</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Desc. Paciente</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Desc. Cartão</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Glosa</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Líquido</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {particularLoading ? (
+                <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-500">Carregando...</td></tr>
+              ) : filteredParticulares.length === 0 ? (
+                <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-500">
+                  <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                  <span className="block text-sm">Nenhum lançamento particular encontrado para este mês.</span>
+                </td></tr>
+              ) : filteredParticulares.map((item) => {
+                const global = Math.max(0, Number(item.valor || 0) - Number(item.desconto_paciente || 0) - Number(item.desconto_cartao || 0) - Number(item.valor_glosa || 0));
+                return (
+                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-700">{formatDate(item.data_cirurgia)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{item.nome_paciente}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{item.tipo_procedimento || 'Consulta'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{item.forma_pagamento || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-center text-gray-700">{item.quantidade || 1}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(item.valor)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600">{money(item.desconto_paciente)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600">{money(item.desconto_cartao)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600">{money(item.valor_glosa)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(global)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        item.status_pagamento === 'pago' ? 'bg-green-100 text-green-700' :
+                        item.status_pagamento === 'aprovado' ? 'bg-blue-100 text-blue-700' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>
+                        {item.status_pagamento === 'pago' ? 'Pago' : item.status_pagamento === 'aprovado' ? 'Aprovado' : 'Pendente'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => openParticularEdit(item)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                          <FileText className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => deleteParticular(item.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            {filteredParticulares.length > 0 && (
+              <tfoot className="bg-gray-50 border-t border-gray-200">
+                <tr>
+                  <td colSpan={6} className="px-4 py-3 text-sm font-medium text-gray-700 text-right">Totais:</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(particularTotal)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(filteredParticulares.reduce((s, i) => s + Number(i.desconto_paciente || 0), 0))}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(filteredParticulares.reduce((s, i) => s + Number(i.desconto_cartao || 0), 0))}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(filteredParticulares.reduce((s, i) => s + Number(i.valor_glosa || 0), 0))}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(particularGlobal)}</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      </div>
+
+      </>
       )}
 
       <EditProducaoModal
