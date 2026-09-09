@@ -18,7 +18,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
-import { ProducaoMensal, Medico, Convenio, Repasse } from '../types';
+import { ProducaoMensal, Medico, Convenio, Repasse, Unidade } from '../types';
 import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
 import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
@@ -29,6 +29,7 @@ export const ProducaoMensalComponent: React.FC = () => {
   const [producoes, setProducoes] = useState<ProducaoMensal[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [convenios, setConvenios] = useState<Convenio[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingProducao, setEditingProducao] = useState<ProducaoMensal | null>(null);
@@ -67,15 +68,17 @@ export const ProducaoMensalComponent: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [producaoRes, medicosRes, conveniosRes] = await Promise.all([
+      const [producaoRes, medicosRes, conveniosRes, unidadesRes] = await Promise.all([
         dbHelpers.getProducaoMensalByMonth(selectedMonth),
         dbHelpers.getMedicos(),
-        dbHelpers.getConvenios()
+        dbHelpers.getConvenios(),
+        dbHelpers.getUnidades()
       ]);
 
       if (producaoRes.data) setProducoes(producaoRes.data);
       if (medicosRes.data) setMedicos(medicosRes.data);
       if (conveniosRes.data) setConvenios(conveniosRes.data);
+      if (unidadesRes.data) setUnidades(unidadesRes.data);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
@@ -1113,13 +1116,16 @@ export const ProducaoMensalComponent: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
-                <input
-                  type="text"
+                <select
                   value={particularForm.unidade}
                   onChange={(e) => setParticularForm((p) => ({ ...p, unidade: e.target.value }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="Nome da unidade"
-                />
+                >
+                  <option value="">Selecione a unidade</option>
+                  {unidades.map((u) => (
+                    <option key={u.id} value={u.nome}>{u.nome}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Médico *</label>

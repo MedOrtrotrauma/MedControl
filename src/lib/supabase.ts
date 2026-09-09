@@ -110,6 +110,40 @@ export const dbHelpers = {
     return { data, error };
   },
 
+  // Unidades
+  async getUnidades() {
+    const { data, error } = await supabase
+      .from('unidades')
+      .select('*')
+      .order('nome');
+    return { data, error };
+  },
+
+  async createUnidade(unidade: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('unidades')
+      .insert([unidade])
+      .select();
+    return { data, error };
+  },
+
+  async updateUnidade(id: number, unidade: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('unidades')
+      .update(unidade)
+      .eq('id', id)
+      .select();
+    return { data, error };
+  },
+
+  async deleteUnidade(id: number) {
+    const { data, error } = await supabase
+      .from('unidades')
+      .delete()
+      .eq('id', id);
+    return { data, error };
+  },
+
   // Produção Mensal
   async getProducaoMensal() {
     const { data, error } = await supabase

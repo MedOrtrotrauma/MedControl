@@ -18,6 +18,13 @@ export interface Hospital {
   created_at?: string;
 }
 
+export interface Unidade {
+  id: number;
+  nome: string;
+  cidade?: string;
+  created_at?: string;
+}
+
 export interface ProducaoMensal {
   id: number;
   medico_id: number;
