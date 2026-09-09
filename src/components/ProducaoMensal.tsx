@@ -18,7 +18,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
-import { ProducaoMensal, Medico, Convenio, Repasse, Unidade } from '../types';
+import { ProducaoMensal, Medico, Convenio, Repasse, Unidade, Procedimento } from '../types';
 import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
 import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
@@ -30,6 +30,7 @@ export const ProducaoMensalComponent: React.FC = () => {
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [convenios, setConvenios] = useState<Convenio[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [procedimentos, setProcedimentos] = useState<Procedimento[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingProducao, setEditingProducao] = useState<ProducaoMensal | null>(null);
@@ -68,17 +69,19 @@ export const ProducaoMensalComponent: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [producaoRes, medicosRes, conveniosRes, unidadesRes] = await Promise.all([
+      const [producaoRes, medicosRes, conveniosRes, unidadesRes, procedimentosRes] = await Promise.all([
         dbHelpers.getProducaoMensalByMonth(selectedMonth),
         dbHelpers.getMedicos(),
         dbHelpers.getConvenios(),
-        dbHelpers.getUnidades()
+        dbHelpers.getUnidades(),
+        dbHelpers.getProcedimentos()
       ]);
 
       if (producaoRes.data) setProducoes(producaoRes.data);
       if (medicosRes.data) setMedicos(medicosRes.data);
       if (conveniosRes.data) setConvenios(conveniosRes.data);
       if (unidadesRes.data) setUnidades(unidadesRes.data);
+      if (procedimentosRes.data) setProcedimentos(procedimentosRes.data);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
@@ -1174,13 +1177,16 @@ export const ProducaoMensalComponent: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Procedimento</label>
-                <input
-                  type="text"
+                <select
                   value={particularForm.tipo_procedimento}
                   onChange={(e) => setParticularForm((p) => ({ ...p, tipo_procedimento: e.target.value }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="Consulta, infiltração..."
-                />
+                >
+                  <option value="">Selecione o procedimento</option>
+                  {procedimentos.map((procedimento) => (
+                    <option key={procedimento.id} value={procedimento.nome}>{procedimento.nome}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>

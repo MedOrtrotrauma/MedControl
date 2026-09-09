@@ -25,6 +25,12 @@ export interface Unidade {
   created_at?: string;
 }
 
+export interface Procedimento {
+  id: number;
+  nome: string;
+  created_at?: string;
+}
+
 export interface ProducaoMensal {
   id: number;
   medico_id: number;

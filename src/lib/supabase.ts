@@ -144,6 +144,40 @@ export const dbHelpers = {
     return { data, error };
   },
 
+  // Procedimentos
+  async getProcedimentos() {
+    const { data, error } = await supabase
+      .from('procedimentos')
+      .select('*')
+      .order('nome');
+    return { data, error };
+  },
+
+  async createProcedimento(procedimento: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('procedimentos')
+      .insert([procedimento])
+      .select();
+    return { data, error };
+  },
+
+  async updateProcedimento(id: number, procedimento: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('procedimentos')
+      .update(procedimento)
+      .eq('id', id)
+      .select();
+    return { data, error };
+  },
+
+  async deleteProcedimento(id: number) {
+    const { data, error } = await supabase
+      .from('procedimentos')
+      .delete()
+      .eq('id', id);
+    return { data, error };
+  },
+
   // Produção Mensal
   async getProducaoMensal() {
     const { data, error } = await supabase

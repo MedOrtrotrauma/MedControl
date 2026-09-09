@@ -20,15 +20,16 @@ import { MedicosCadastro } from './components/Cadastros/MedicosCadastro';
 import { ConveniosCadastro } from './components/Cadastros/ConveniosCadastro';
 import { HospitaisCadastro } from './components/Cadastros/HospitaisCadastro';
 import { UnidadesCadastro } from './components/Cadastros/UnidadesCadastro';
+import { ProcedimentosCadastro } from './components/Cadastros/ProcedimentosCadastro';
 import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
 
-type Page = 'overview' | 'repasses' | 'producao' | 'medicos' | 'convenios' | 'hospitais' | 'unidades';
+type Page = 'overview' | 'repasses' | 'producao' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos';
 
 const menuGroups = [
   { label: 'Visão geral', items: [{ id: 'overview' as Page, label: 'Resumo financeiro', icon: BarChart3 }] },
   { label: 'Operação', items: [{ id: 'repasses' as Page, label: 'Repasses médicos', icon: CircleDollarSign }, { id: 'producao' as Page, label: 'Produção mensal', icon: ClipboardList }] },
-  { label: 'Cadastros', items: [{ id: 'medicos' as Page, label: 'Médicos', icon: UserRound }, { id: 'convenios' as Page, label: 'Convênios', icon: Building2 }, { id: 'hospitais' as Page, label: 'Hospitais e clínicas', icon: Building2 }, { id: 'unidades' as Page, label: 'Unidades', icon: Building2 }] },
+  { label: 'Cadastros', items: [{ id: 'medicos' as Page, label: 'Médicos', icon: UserRound }, { id: 'convenios' as Page, label: 'Convênios', icon: Building2 }, { id: 'hospitais' as Page, label: 'Hospitais e clínicas', icon: Building2 }, { id: 'unidades' as Page, label: 'Unidades', icon: Building2 }, { id: 'procedimentos' as Page, label: 'Procedimentos', icon: Stethoscope }] },
 ];
 
 function AppContent() {
@@ -40,7 +41,7 @@ function AppContent() {
   if (loading) return <div className="loading-screen"><div className="loading-mark"><Stethoscope size={24} /></div><span>Carregando seu espaço financeiro...</span></div>;
   if (!user) return <LoginForm />;
 
-  const pageTitle = page === 'overview' ? 'Resumo financeiro' : page === 'repasses' ? 'Repasses médicos' : page === 'producao' ? 'Produção mensal' : page === 'medicos' ? 'Médicos' : page === 'convenios' ? 'Convênios' : page === 'hospitais' ? 'Hospitais e clínicas' : 'Unidades';
+  const pageTitle = page === 'overview' ? 'Resumo financeiro' : page === 'repasses' ? 'Repasses médicos' : page === 'producao' ? 'Produção mensal' : page === 'medicos' ? 'Médicos' : page === 'convenios' ? 'Convênios' : page === 'hospitais' ? 'Hospitais e clínicas' : page === 'unidades' ? 'Unidades' : 'Procedimentos';
 
   const renderPage = () => {
     if (page === 'repasses') return <RepasseComponent />;
@@ -49,6 +50,7 @@ function AppContent() {
     if (page === 'convenios') return <ConveniosCadastro />;
     if (page === 'hospitais') return <HospitaisCadastro />;
     if (page === 'unidades') return <UnidadesCadastro />;
+    if (page === 'procedimentos') return <ProcedimentosCadastro />;
     return <Overview onNavigate={setPage} />;
   };
 
