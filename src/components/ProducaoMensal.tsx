@@ -18,7 +18,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
-import { ProducaoMensal, Medico, Convenio, Hospital, Repasse, StatusPagamento } from '../types';
+import { ProducaoMensal, Medico, Convenio, Repasse } from '../types';
 import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
 import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
@@ -29,7 +29,6 @@ export const ProducaoMensalComponent: React.FC = () => {
   const [producoes, setProducoes] = useState<ProducaoMensal[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [convenios, setConvenios] = useState<Convenio[]>([]);
-  const [hospitais, setHospitais] = useState<Hospital[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingProducao, setEditingProducao] = useState<ProducaoMensal | null>(null);
@@ -68,17 +67,15 @@ export const ProducaoMensalComponent: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [producaoRes, medicosRes, conveniosRes, hospitaisRes] = await Promise.all([
+      const [producaoRes, medicosRes, conveniosRes] = await Promise.all([
         dbHelpers.getProducaoMensalByMonth(selectedMonth),
         dbHelpers.getMedicos(),
-        dbHelpers.getConvenios(),
-        dbHelpers.getHospitais()
+        dbHelpers.getConvenios()
       ]);
 
       if (producaoRes.data) setProducoes(producaoRes.data);
       if (medicosRes.data) setMedicos(medicosRes.data);
       if (conveniosRes.data) setConvenios(conveniosRes.data);
-      if (hospitaisRes.data) setHospitais(hospitaisRes.data);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
@@ -98,21 +95,17 @@ export const ProducaoMensalComponent: React.FC = () => {
   };
 
   const particularFormInitial = () => ({
+    unidade: '',
     medico_id: '',
-    hospital_id: '',
     nome_paciente: '',
     data_cirurgia: '',
-    tipo: 'consulta' as 'consulta' | 'cirurgia',
-    tipo_procedimento: 'Consulta',
+    vinculo: 'socio' as 'externo' | 'socio',
+    tipo_procedimento: '',
     forma_pagamento: 'pix' as 'pix' | 'credito' | 'debito' | 'especie',
-    quantidade: '1',
     valor: '',
-    desconto_paciente: '0',
-    desconto_cartao: '0',
-    valor_glosa: '0',
+    valor_repasse: '',
+    check_conferencia: false,
     month_reference: selectedMonth,
-    observacao: '',
-    status_pagamento: 'pendente' as StatusPagamento,
   });
   const [particularForm, setParticularForm] = useState(particularFormInitial());
 
@@ -125,21 +118,17 @@ export const ProducaoMensalComponent: React.FC = () => {
   const openParticularEdit = (item: Repasse) => {
     setEditingParticular(item);
     setParticularForm({
+      unidade: item.unidade || '',
       medico_id: String(item.medico_id),
-      hospital_id: String(item.hospital_id),
       nome_paciente: item.nome_paciente,
       data_cirurgia: item.data_cirurgia,
-      tipo: item.tipo,
-      tipo_procedimento: item.tipo_procedimento || 'Consulta',
+      vinculo: (item.vinculo || 'socio') as 'externo' | 'socio',
+      tipo_procedimento: item.tipo_procedimento || '',
       forma_pagamento: (item.forma_pagamento || 'pix') as 'pix' | 'credito' | 'debito' | 'especie',
-      quantidade: String(item.quantidade || 1),
       valor: String(item.valor || 0),
-      desconto_paciente: String(item.desconto_paciente || 0),
-      desconto_cartao: String(item.desconto_cartao || 0),
-      valor_glosa: String(item.valor_glosa || 0),
+      valor_repasse: String(item.valor_repasse || 0),
+      check_conferencia: item.check_conferencia || false,
       month_reference: item.month_reference || selectedMonth,
-      observacao: item.observacao || '',
-      status_pagamento: (item.status_pagamento || 'pendente') as StatusPagamento,
     });
     setShowParticularForm(true);
   };
@@ -148,36 +137,40 @@ export const ProducaoMensalComponent: React.FC = () => {
 
   const saveParticular = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!particularForm.medico_id || !particularForm.hospital_id || !particularForm.nome_paciente || !particularForm.data_cirurgia) {
-      alert('Preencha os campos obrigatórios: médico, hospital, paciente e data.');
+    if (!particularForm.medico_id || !particularForm.nome_paciente || !particularForm.data_cirurgia) {
+      alert('Preencha os campos obrigatórios: médico, paciente e data.');
       return;
     }
     setParticularLoading(true);
     const valor = num(particularForm.valor);
-    const global = Math.max(0, valor - num(particularForm.desconto_paciente) - num(particularForm.desconto_cartao) - num(particularForm.valor_glosa));
+    const valorRepasse = num(particularForm.valor_repasse);
     const payload = {
       medico_id: Number(particularForm.medico_id),
-      hospital_id: Number(particularForm.hospital_id),
+      hospital_id: null,
       nome_paciente: particularForm.nome_paciente.trim(),
       data_cirurgia: particularForm.data_cirurgia,
-      tipo: particularForm.tipo,
+      tipo: 'consulta' as const,
       is_particular: true,
       tipo_procedimento_detalhado: 'cirurgia_particular' as const,
-      tipo_procedimento: particularForm.tipo_procedimento,
+      tipo_procedimento: particularForm.tipo_procedimento.trim() || null,
       forma_pagamento: particularForm.forma_pagamento,
-      quantidade: num(particularForm.quantidade),
+      quantidade: 1,
       valor: valor,
-      desconto_paciente: num(particularForm.desconto_paciente),
-      desconto_cartao: num(particularForm.desconto_cartao),
-      valor_glosa: num(particularForm.valor_glosa),
-      valor_recebido: global,
-      destinatario_tipo: 'socio' as const,
+      valor_repasse: valorRepasse,
+      check_conferencia: particularForm.check_conferencia,
+      unidade: particularForm.unidade.trim() || null,
+      vinculo: particularForm.vinculo,
+      desconto_paciente: 0,
+      desconto_cartao: 0,
+      valor_glosa: 0,
+      valor_recebido: valor,
+      destinatario_tipo: particularForm.vinculo === 'externo' ? 'terceiro' as const : 'socio' as const,
       auxilio_1: 0, auxilio_2: 0, taxa_1_5: 0, imposto_percentual: 0, outras_deducoes: 0,
-      valor_liquido: global, percentual_terceiro: 0, valor_terceiro: 0, saldo_controle: 0,
+      valor_liquido: valor, percentual_terceiro: 0, valor_terceiro: 0, saldo_controle: 0,
       month_reference: particularForm.month_reference,
-      observacao: particularForm.observacao.trim() || null,
-      status_pagamento: particularForm.status_pagamento,
-      data_pagamento: particularForm.status_pagamento === 'pago' ? new Date().toISOString().slice(0, 10) : null,
+      observacao: null,
+      status_pagamento: 'pendente' as const,
+      data_pagamento: null,
     };
     const result = editingParticular
       ? await dbHelpers.updateRepasse(editingParticular.id, payload)
@@ -207,10 +200,7 @@ export const ProducaoMensalComponent: React.FC = () => {
   });
 
   const particularTotal = filteredParticulares.reduce((sum, item) => sum + Number(item.valor || 0), 0);
-  const particularGlobal = filteredParticulares.reduce((sum, item) => {
-    return sum + Math.max(0, Number(item.valor || 0) - Number(item.desconto_paciente || 0) - Number(item.desconto_cartao || 0) - Number(item.valor_glosa || 0));
-  }, 0);
-  const particularDescontos = particularTotal - particularGlobal;
+  const particularRepasse = filteredParticulares.reduce((sum, item) => sum + Number(item.valor_repasse || 0), 0);
   const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 
   // Função para gerar opções de meses
@@ -1031,11 +1021,11 @@ export const ProducaoMensalComponent: React.FC = () => {
       <>
 
       {/* Summary Cards - Particular */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-emerald-100 text-sm font-medium">Total Particular</p>
+              <p className="text-emerald-100 text-sm font-medium">Valor Recebido</p>
               <p className="text-2xl font-bold">{money(particularTotal)}</p>
               <p className="text-emerald-200 text-xs mt-1">{formatSelectedMonth(selectedMonth)}</p>
             </div>
@@ -1047,24 +1037,12 @@ export const ProducaoMensalComponent: React.FC = () => {
         <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-teal-100 text-sm font-medium">Líquido (após descontos)</p>
-              <p className="text-2xl font-bold">{money(particularGlobal)}</p>
+              <p className="text-teal-100 text-sm font-medium">Valor de Repasse</p>
+              <p className="text-2xl font-bold">{money(particularRepasse)}</p>
               <p className="text-teal-200 text-xs mt-1">{filteredParticulares.length} lançamentos</p>
             </div>
             <div className="bg-white/20 p-3 rounded-lg">
               <TrendingUp className="h-6 w-6" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-amber-100 text-sm font-medium">Descontos</p>
-              <p className="text-2xl font-bold">{money(particularDescontos)}</p>
-              <p className="text-amber-200 text-xs mt-1">Paciente, cartão e glosa</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg">
-              <DollarSign className="h-6 w-6" />
             </div>
           </div>
         </div>
@@ -1134,6 +1112,16 @@ export const ProducaoMensalComponent: React.FC = () => {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
+                <input
+                  type="text"
+                  value={particularForm.unidade}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, unidade: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="Nome da unidade"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Médico *</label>
                 <select
                   value={particularForm.medico_id}
@@ -1148,21 +1136,18 @@ export const ProducaoMensalComponent: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hospital / Clínica *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vínculo</label>
                 <select
-                  value={particularForm.hospital_id}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, hospital_id: e.target.value }))}
+                  value={particularForm.vinculo}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, vinculo: e.target.value as 'externo' | 'socio' }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
                 >
-                  <option value="">Selecione</option>
-                  {hospitais.map((h) => (
-                    <option key={h.id} value={h.id}>{h.nome}</option>
-                  ))}
+                  <option value="socio">Sócio</option>
+                  <option value="externo">Externo</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Paciente *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paciente Particular *</label>
                 <input
                   type="text"
                   value={particularForm.nome_paciente}
@@ -1172,7 +1157,7 @@ export const ProducaoMensalComponent: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data do Atendimento *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
                 <input
                   type="date"
                   value={particularForm.data_cirurgia}
@@ -1180,17 +1165,6 @@ export const ProducaoMensalComponent: React.FC = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                <select
-                  value={particularForm.tipo}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, tipo: e.target.value as 'consulta' | 'cirurgia' }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                >
-                  <option value="consulta">Consulta</option>
-                  <option value="cirurgia">Cirurgia</option>
-                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Procedimento</label>
@@ -1216,17 +1190,7 @@ export const ProducaoMensalComponent: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={particularForm.quantidade}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, quantidade: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Recebido *</label>
                 <input
                   type="number"
                   min="0"
@@ -1238,59 +1202,25 @@ export const ProducaoMensalComponent: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Desc. Paciente</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor de Repasse</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={particularForm.desconto_paciente}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, desconto_paciente: e.target.value }))}
+                  value={particularForm.valor_repasse}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, valor_repasse: e.target.value }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Desc. Cartão</label>
+              <div className="md:col-span-2 flex items-center gap-3">
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={particularForm.desconto_cartao}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, desconto_cartao: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  type="checkbox"
+                  id="check_conferencia"
+                  checked={particularForm.check_conferencia}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, check_conferencia: e.target.checked }))}
+                  className="h-5 w-5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Glosa</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={particularForm.valor_glosa}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, valor_glosa: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={particularForm.status_pagamento}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, status_pagamento: e.target.value as StatusPagamento }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                >
-                  <option value="pendente">Pendente</option>
-                  <option value="aprovado">Aprovado</option>
-                  <option value="pago">Pago</option>
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Observação</label>
-                <textarea
-                  rows={2}
-                  value={particularForm.observacao}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, observacao: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="Opcional"
-                />
+                <label htmlFor="check_conferencia" className="text-sm font-medium text-gray-700">Conferido (Check)</label>
               </div>
               <div className="md:col-span-2 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowParticularForm(false)} className="px-6 py-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
@@ -1309,51 +1239,42 @@ export const ProducaoMensalComponent: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Médico</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paciente</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vínculo</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paciente Particular</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Procedimento</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forma Pagto</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Qtde</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Desc. Paciente</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Desc. Cartão</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Glosa</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Líquido</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Recebido</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Repasse</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Check</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {particularLoading ? (
-                <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-500">Carregando...</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-500">Carregando...</td></tr>
               ) : filteredParticulares.length === 0 ? (
-                <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-500">
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                   <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                   <span className="block text-sm">Nenhum lançamento particular encontrado para este mês.</span>
                 </td></tr>
               ) : filteredParticulares.map((item) => {
-                const global = Math.max(0, Number(item.valor || 0) - Number(item.desconto_paciente || 0) - Number(item.desconto_cartao || 0) - Number(item.valor_glosa || 0));
                 return (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-700">{item.unidade || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{formatDate(item.data_cirurgia)}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{item.vinculo === 'externo' ? 'Externo' : 'Sócio'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{item.nome_paciente}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{item.tipo_procedimento || 'Consulta'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{item.tipo_procedimento || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{item.forma_pagamento || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-center text-gray-700">{item.quantidade || 1}</td>
                     <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(item.valor)}</td>
-                    <td className="px-4 py-3 text-sm text-right text-red-600">{money(item.desconto_paciente)}</td>
-                    <td className="px-4 py-3 text-sm text-right text-red-600">{money(item.desconto_cartao)}</td>
-                    <td className="px-4 py-3 text-sm text-right text-red-600">{money(item.valor_glosa)}</td>
-                    <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(global)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-teal-700">{money(item.valor_repasse)}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        item.status_pagamento === 'pago' ? 'bg-green-100 text-green-700' :
-                        item.status_pagamento === 'aprovado' ? 'bg-blue-100 text-blue-700' :
-                        'bg-amber-100 text-amber-700'
-                      }`}>
-                        {item.status_pagamento === 'pago' ? 'Pago' : item.status_pagamento === 'aprovado' ? 'Aprovado' : 'Pendente'}
+                      <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${item.check_conferencia ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {item.check_conferencia ? '✓' : ''}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -1373,12 +1294,9 @@ export const ProducaoMensalComponent: React.FC = () => {
             {filteredParticulares.length > 0 && (
               <tfoot className="bg-gray-50 border-t border-gray-200">
                 <tr>
-                  <td colSpan={6} className="px-4 py-3 text-sm font-medium text-gray-700 text-right">Totais:</td>
+                  <td colSpan={7} className="px-4 py-3 text-sm font-medium text-gray-700 text-right">Totais:</td>
                   <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(particularTotal)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(filteredParticulares.reduce((s, i) => s + Number(i.desconto_paciente || 0), 0))}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(filteredParticulares.reduce((s, i) => s + Number(i.desconto_cartao || 0), 0))}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(filteredParticulares.reduce((s, i) => s + Number(i.valor_glosa || 0), 0))}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(particularGlobal)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-teal-700">{money(particularRepasse)}</td>
                   <td colSpan={2}></td>
                 </tr>
               </tfoot>

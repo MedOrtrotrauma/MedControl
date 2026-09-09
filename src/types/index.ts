@@ -76,4 +76,8 @@ export interface Repasse {
   saldo_controle: number;
   numero_atendimento: string;
   valor_glosa: number;
+  unidade?: string;
+  vinculo?: 'externo' | 'socio';
+  valor_repasse: number;
+  check_conferencia: boolean;
 }
