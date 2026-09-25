@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { DestinatarioTipo } from '../types';
+import type { PerfilUsuario } from '../components/Auth/AuthContext';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -380,6 +381,77 @@ export const dbHelpers = {
       .from('repasses_imagem')
       .delete()
       .eq('id', id);
+    return { data, error };
+  },
+
+  // Perfis de usuário
+  async getPerfis() {
+    const { data, error } = await supabase
+      .from('perfis_usuario')
+      .select('*')
+      .order('nome');
+    return { data, error };
+  },
+
+  async getPerfil(uid: string) {
+    const { data, error } = await supabase
+      .from('perfis_usuario')
+      .select('*')
+      .eq('id', uid)
+      .maybeSingle();
+    return { data, error };
+  },
+
+  async createPerfilByAdmin(perfil: { id: string; nome: string; email: string; tipo: PerfilUsuario['tipo']; medico_id?: number | null; ativo?: boolean }) {
+    const { data, error } = await supabase
+      .from('perfis_usuario')
+      .insert([perfil])
+      .select();
+    return { data, error };
+  },
+
+  async updatePerfil(id: string, perfil: Partial<Omit<PerfilUsuario, 'id'>>) {
+    const { data, error } = await supabase
+      .from('perfis_usuario')
+      .update({ ...perfil, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select();
+    return { data, error };
+  },
+
+  async deletePerfil(id: string) {
+    const { data, error } = await supabase
+      .from('perfis_usuario')
+      .delete()
+      .eq('id', id);
+    return { data, error };
+  },
+
+  async createUserAuth(email: string, password: string, nome: string) {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { nome },
+    });
+    return { data, error };
+  },
+
+  // Relatório: todos repasses com joins para filtros
+  async getRepassesForReport(filters: { medico?: string; hospital?: string; procedimento?: string; unidade?: string; paciente?: string; dataInicio?: string; dataFim?: string; tipo?: DestinatarioTipo | 'todos' }) {
+    let query = supabase
+      .from('repasses')
+      .select(`*, medico:medicos(*), convenio:convenios(*), hospital:hospitais(*)`)
+      .order('data_cirurgia', { ascending: false });
+    if (filters.tipo && filters.tipo !== 'todos') query = query.eq('destinatario_tipo', filters.tipo);
+    if (filters.medico) query = query.eq('medico_id', Number(filters.medico));
+    if (filters.hospital) query = query.eq('hospital_id', Number(filters.hospital));
+    if (filters.unidade) query = query.ilike('unidade', `%${filters.unidade}%`);
+    if (filters.paciente) query = query.ilike('nome_paciente', `%${filters.paciente}%`);
+    if (filters.procedimento) query = query.ilike('tipo_procedimento', `%${filters.procedimento}%`);
+    if (filters.dataInicio) query = query.gte('data_cirurgia', filters.dataInicio);
+    if (filters.dataFim) query = query.lte('data_cirurgia', filters.dataFim);
+    const { data, error } = await query;
     return { data, error };
   }
 };

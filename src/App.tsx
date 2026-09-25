@@ -2,83 +2,163 @@ import { useState } from 'react';
 import {
   BarChart3,
   Building2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
-  ClipboardList,
+  FileText,
   LogOut,
   Menu,
   Settings2,
   Stethoscope,
   UserRound,
   UsersRound,
+  Users,
   X,
+  ShieldCheck,
 } from 'lucide-react';
 import { RepasseComponent } from './components/Repasse';
-import { ProducaoMensalComponent } from './components/ProducaoMensal';
+import { RelatoriosComponent } from './components/Relatorios';
 import { MedicosCadastro } from './components/Cadastros/MedicosCadastro';
 import { ConveniosCadastro } from './components/Cadastros/ConveniosCadastro';
 import { HospitaisCadastro } from './components/Cadastros/HospitaisCadastro';
 import { UnidadesCadastro } from './components/Cadastros/UnidadesCadastro';
 import { ProcedimentosCadastro } from './components/Cadastros/ProcedimentosCadastro';
+import { UsuariosCadastro } from './components/Cadastros/UsuariosCadastro';
 import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
+import type { TipoUsuario } from './components/Auth/AuthContext';
 
-type Page = 'overview' | 'repasses' | 'producao' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos';
+type Page = 'repasse_terceiros' | 'repasse_socios' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'usuarios';
 
-const menuGroups = [
-  { label: 'Visão geral', items: [{ id: 'overview' as Page, label: 'Resumo financeiro', icon: BarChart3 }] },
-  { label: 'Operação', items: [{ id: 'repasses' as Page, label: 'Repasses médicos', icon: CircleDollarSign }, { id: 'producao' as Page, label: 'Produção mensal', icon: ClipboardList }] },
-  { label: 'Cadastros', items: [{ id: 'medicos' as Page, label: 'Médicos', icon: UserRound }, { id: 'convenios' as Page, label: 'Convênios', icon: Building2 }, { id: 'hospitais' as Page, label: 'Hospitais e clínicas', icon: Building2 }, { id: 'unidades' as Page, label: 'Unidades', icon: Building2 }, { id: 'procedimentos' as Page, label: 'Procedimentos', icon: Stethoscope }] },
+interface MenuItem { id: Page; label: string; icon: typeof BarChart3; }
+interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; roles: TipoUsuario[]; }
+
+const menuGroups: MenuGroup[] = [
+  {
+    label: 'Repasse médico', icon: CircleDollarSign, roles: ['administrativo', 'recepcao', 'medico'],
+    items: [
+      { id: 'repasse_terceiros', label: 'Repasse a terceiros', icon: Users },
+      { id: 'repasse_socios', label: 'Repasse a sócios', icon: CircleDollarSign },
+    ],
+  },
+  {
+    label: 'Relatórios', icon: FileText, roles: ['administrativo'],
+    items: [{ id: 'relatorios', label: 'Relatório de repasses', icon: FileText }],
+  },
+  {
+    label: 'Cadastros', icon: Settings2, roles: ['administrativo'],
+    items: [
+      { id: 'medicos', label: 'Médicos', icon: UserRound },
+      { id: 'convenios', label: 'Convênios', icon: Building2 },
+      { id: 'hospitais', label: 'Hospitais e clínicas', icon: Building2 },
+      { id: 'unidades', label: 'Unidades', icon: Building2 },
+      { id: 'procedimentos', label: 'Procedimentos', icon: Stethoscope },
+      { id: 'usuarios', label: 'Usuários', icon: ShieldCheck },
+    ],
+  },
 ];
 
+const pageTitles: Record<Page, string> = {
+  repasse_terceiros: 'Repasse a terceiros',
+  repasse_socios: 'Repasse a sócios',
+  relatorios: 'Relatório de repasses',
+  medicos: 'Médicos',
+  convenios: 'Convênios',
+  hospitais: 'Hospitais e clínicas',
+  unidades: 'Unidades',
+  procedimentos: 'Procedimentos',
+  usuarios: 'Cadastro de usuários',
+};
+
 function AppContent() {
-  const { user, loading, signOut } = useAuth();
-  const [page, setPage] = useState<Page>('repasses');
+  const { user, perfil, loading, signOut } = useAuth();
+  const [page, setPage] = useState<Page>('repasse_terceiros');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasse médico']));
 
-  if (loading) return <div className="loading-screen"><div className="loading-mark"><Stethoscope size={24} /></div><span>Carregando seu espaço financeiro...</span></div>;
+  if (loading) return <div className="loading-screen"><img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" /><span>Carregando seu espaço...</span></div>;
   if (!user) return <LoginForm />;
+  if (!perfil) return <div className="loading-screen"><span>Carregando perfil...</span></div>;
 
-  const pageTitle = page === 'overview' ? 'Resumo financeiro' : page === 'repasses' ? 'Repasses médicos' : page === 'producao' ? 'Produção mensal' : page === 'medicos' ? 'Médicos' : page === 'convenios' ? 'Convênios' : page === 'hospitais' ? 'Hospitais e clínicas' : page === 'unidades' ? 'Unidades' : 'Procedimentos';
+  const tipo = perfil.tipo;
+  const visibleGroups = menuGroups.filter((g) => g.roles.includes(tipo));
+  const defaultPage = tipo === 'medico' ? 'repasse_terceiros' : 'repasse_terceiros';
 
-  const renderPage = () => {
-    if (page === 'repasses') return <RepasseComponent />;
-    if (page === 'producao') return <ProducaoMensalComponent />;
-    if (page === 'medicos') return <MedicosCadastro />;
-    if (page === 'convenios') return <ConveniosCadastro />;
-    if (page === 'hospitais') return <HospitaisCadastro />;
-    if (page === 'unidades') return <UnidadesCadastro />;
-    if (page === 'procedimentos') return <ProcedimentosCadastro />;
-    return <Overview onNavigate={setPage} />;
+  const toggleGroup = (label: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      return next;
+    });
   };
 
-  const navigate = (nextPage: Page) => {
-    setPage(nextPage);
-    setSidebarOpen(false);
+  const navigate = (nextPage: Page) => { setPage(nextPage); setSidebarOpen(false); };
+
+  const renderPage = () => {
+    switch (page) {
+      case 'repasse_terceiros': return <RepasseComponent tipo="terceiro" />;
+      case 'repasse_socios': return <RepasseComponent tipo="socio" />;
+      case 'relatorios': return <RelatoriosComponent />;
+      case 'medicos': return <MedicosCadastro />;
+      case 'convenios': return <ConveniosCadastro />;
+      case 'hospitais': return <HospitaisCadastro />;
+      case 'unidades': return <UnidadesCadastro />;
+      case 'procedimentos': return <ProcedimentosCadastro />;
+      case 'usuarios': return <UsuariosCadastro />;
+      default: return <RepasseComponent tipo="terceiro" />;
+    }
   };
 
   return (
     <div className="app-shell">
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="Fechar menu" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${sidebarOpen ? 'mobile-open' : ''}`}>
-        <div className="brand"><div className="brand-mark"><Stethoscope size={21} /></div>{!collapsed && <div><strong>MedControl</strong><span>Gestão médica</span></div>}<button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
+        <div className="brand">
+          <img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="brand-logo" />
+          {!collapsed && <div><strong>Vertebrare</strong><span>Controle de Repasse</span></div>}
+          <button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
+        </div>
         <div className="sidebar-caption">{!collapsed && 'MENU PRINCIPAL'}</div>
-        <nav>{menuGroups.map((group) => <div className="menu-group" key={group.label}>{!collapsed && <span className="menu-label">{group.label}</span>}{group.items.map((item) => <button key={item.id} className={`menu-item ${page === item.id ? 'active' : ''}`} onClick={() => navigate(item.id)} title={collapsed ? item.label : undefined}><item.icon size={18} />{!collapsed && <span>{item.label}</span>}</button>)}</div>)}</nav>
-        <div className="sidebar-bottom">{!collapsed && <div className="account-card"><div className="avatar"><UsersRound size={16} /></div><div><strong>Conta ativa</strong><span>{user.email}</span></div></div>}<button className="menu-item" onClick={() => void signOut()}><LogOut size={18} />{!collapsed && <span>Sair</span>}</button></div>
-        <button className="collapse-button" onClick={() => setCollapsed((value) => !value)}>{collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}</button>
+        <nav>
+          {visibleGroups.map((group) => {
+            const isOpen = openGroups.has(group.label) || collapsed;
+            const hasActive = group.items.some((i) => i.id === page);
+            return (
+              <div className="menu-group" key={group.label}>
+                {!collapsed && (
+                  <button className={`menu-group-header ${hasActive ? 'active-group' : ''}`} onClick={() => toggleGroup(group.label)}>
+                    <group.icon size={18} />
+                    <span>{group.label}</span>
+                    <ChevronDown size={15} className={isOpen ? 'chevron-open' : ''} />
+                  </button>
+                )}
+                {(isOpen || collapsed) && group.items.map((item) => (
+                  <button key={item.id} className={`menu-item ${page === item.id ? 'active' : ''} ${collapsed ? 'indented' : ''}`} onClick={() => navigate(item.id)} title={collapsed ? item.label : undefined}>
+                    <item.icon size={16} />{!collapsed && <span>{item.label}</span>}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </nav>
+        <div className="sidebar-bottom">
+          {!collapsed && <div className="account-card"><div className="avatar"><UsersRound size={16} /></div><div><strong>{perfil.nome}</strong><span>{perfil.email}</span></div></div>}
+          <button className="menu-item" onClick={() => void signOut()}><LogOut size={18} />{!collapsed && <span>Sair</span>}</button>
+        </div>
+        <button className="collapse-button" onClick={() => setCollapsed((v) => !v)}>{collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}</button>
       </aside>
       <main className="main-area">
-        <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button><div><span className="breadcrumb">MedControl / {pageTitle}</span><h2>{pageTitle}</h2></div><div className="topbar-actions"><span className="secure-badge"><Settings2 size={15} /> Ambiente seguro</span><div className="top-avatar"><UserRound size={16} /></div></div></header>
+        <header className="topbar">
+          <button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button>
+          <div><span className="breadcrumb">Vertebrare / {pageTitles[page]}</span><h2>{pageTitles[page]}</h2></div>
+          <div className="topbar-actions"><span className="secure-badge"><Settings2 size={15} /> {tipo === 'administrativo' ? 'Administrador' : tipo === 'recepcao' ? 'Recepção' : 'Médico'}</span><div className="top-avatar"><UserRound size={16} /></div></div>
+        </header>
         <div className="content-area">{renderPage()}</div>
       </main>
     </div>
   );
-}
-
-function Overview({ onNavigate }: { onNavigate: (page: Page) => void }) {
-  return <div className="overview-page"><section className="overview-hero"><div><span className="eyebrow">Painel de controle</span><h1>Tenha clareza sobre cada repasse.</h1><p>Organize terceiros e sócios em um único fluxo, com descontos e valores líquidos separados.</p></div><button className="button button-light" onClick={() => onNavigate('repasses')}><CircleDollarSign size={18} /> Abrir repasses</button></section><div className="overview-grid"><button onClick={() => onNavigate('repasses')} className="overview-card"><div className="overview-icon blue"><CircleDollarSign size={21} /></div><strong>Repasses médicos</strong><span>Controle terceiros, sócios, descontos e pagamentos.</span><b>Gerenciar agora <ChevronRight size={16} /></b></button><button onClick={() => onNavigate('producao')} className="overview-card"><div className="overview-icon green"><ClipboardList size={21} /></div><strong>Produção mensal</strong><span>Acompanhe consultas e cirurgias por competência.</span><b>Ver produção <ChevronRight size={16} /></b></button><button onClick={() => onNavigate('medicos')} className="overview-card"><div className="overview-icon amber"><UserRound size={21} /></div><strong>Cadastros de apoio</strong><span>Mantenha médicos, convênios e hospitais atualizados.</span><b>Ver cadastros <ChevronRight size={16} /></b></button></div></div>;
 }
 
 export default function App() {
