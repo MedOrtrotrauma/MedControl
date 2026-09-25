@@ -428,11 +428,10 @@ export const dbHelpers = {
   },
 
   async createUserAuth(email: string, password: string, nome: string) {
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      email_confirm: true,
-      user_metadata: { nome },
+      options: { data: { nome } },
     });
     return { data, error };
   },
