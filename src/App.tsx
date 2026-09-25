@@ -123,8 +123,11 @@ function AppContent() {
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${sidebarOpen ? 'mobile-open' : ''}`}>
         <div className="brand">
           <img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="brand-logo" />
-          {!collapsed && <div><strong>Vertebrare</strong><span>Controle de Repasse</span></div>}
+          {!collapsed && <div className="brand-text"><strong>Vertebrare</strong><span>Controle de Repasse</span></div>}
           <button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
+          <button className="sidebar-toggle" onClick={() => setCollapsed((v) => !v)} title={collapsed ? 'Expandir menu' : 'Recolher menu'} aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}>
+            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
         </div>
         <div className="sidebar-caption">{!collapsed && 'MENU PRINCIPAL'}</div>
         <nav>
@@ -153,7 +156,6 @@ function AppContent() {
           {!collapsed && <div className="account-card"><div className="avatar"><UsersRound size={16} /></div><div><strong>{perfil.nome}</strong><span>{perfil.email}</span></div></div>}
           <button className="menu-item" onClick={() => void signOut()}><LogOut size={18} />{!collapsed && <span>Sair</span>}</button>
         </div>
-        <button className="collapse-button" onClick={() => setCollapsed((v) => !v)}>{collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}</button>
       </aside>
       <main className="main-area">
         <header className="topbar">
