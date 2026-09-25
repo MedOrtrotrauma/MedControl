@@ -44,9 +44,8 @@ export function UsuariosCadastro() {
         });
         if (error) throw error;
       } else {
-        const { error: authError } = await dbHelpers.createUserAuth(form.email, 'vertebrare123', form.nome);
+        const { data: userData, error: authError } = await dbHelpers.createUserAuth(form.email, 'vertebrare123', form.nome);
         if (authError) throw authError;
-        const { data: userData } = await dbHelpers.createUserAuth(form.email, 'vertebrare123', form.nome);
         const uid = (userData as any)?.user?.id;
         if (!uid) throw new Error('Não foi possível obter o ID do usuário criado.');
         const { error } = await dbHelpers.createPerfilByAdmin({

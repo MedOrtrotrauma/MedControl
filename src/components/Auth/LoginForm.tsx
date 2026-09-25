@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, LogIn, RotateCcw } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, LogIn, RotateCcw, UserPlus } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 export const LoginForm: React.FC = () => {
-  const [mode, setMode] = useState<'login' | 'reset'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
+  const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -11,7 +12,7 @@ export const LoginForm: React.FC = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const { signIn, resetPassword } = useAuth();
+  const { signIn, signUp, resetPassword } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +24,21 @@ export const LoginForm: React.FC = () => {
       if (mode === 'login') {
         const { error } = await signIn(email, password);
         if (error) setError('Email ou senha incorretos.');
+      } else if (mode === 'signup') {
+        if (password.length < 6) {
+          setError('A senha deve ter no mínimo 6 caracteres.');
+          setLoading(false);
+          return;
+        }
+        const { error } = await signUp(email, password, nome);
+        if (error) {
+          setError('Não foi possível criar a conta. Este e-mail já pode estar cadastrado.');
+        } else {
+          setMessage('Conta criada com sucesso! Você já pode fazer login.');
+          setMode('login');
+          setNome('');
+          setPassword('');
+        }
       } else {
         const { error } = await resetPassword(email);
         if (error) setError('Não foi possível enviar o e-mail de recuperação.');
@@ -47,14 +63,26 @@ export const LoginForm: React.FC = () => {
 
         <div className="login-form-area">
           <div className="login-heading">
-            <h2>{mode === 'login' ? 'Acesse sua conta' : 'Recuperar senha'}</h2>
-            <p>{mode === 'login' ? 'Use suas credenciais para entrar no sistema.' : 'Informe seu e-mail para receber instruções.'}</p>
+            <h2>{mode === 'login' ? 'Acesse sua conta' : mode === 'signup' ? 'Criar conta' : 'Recuperar senha'}</h2>
+            <p>{mode === 'login' ? 'Use suas credenciais para entrar no sistema.' : mode === 'signup' ? 'Cadastre-se para começar a usar o Vertebrare.' : 'Informe seu e-mail para receber instruções.'}</p>
           </div>
 
           {error && <div className="login-alert error">{error}</div>}
           {message && <div className="login-alert success">{message}</div>}
 
           <form onSubmit={handleSubmit} className="login-form">
+            {mode === 'signup' && (
+              <label className="login-field">
+                <UserPlus size={18} />
+                <input
+                  type="text"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  placeholder="Seu nome completo"
+                  required
+                />
+              </label>
+            )}
             <label className="login-field">
               <Mail size={18} />
               <input
@@ -66,7 +94,7 @@ export const LoginForm: React.FC = () => {
               />
             </label>
 
-            {mode === 'login' && (
+            {mode !== 'reset' && (
               <label className="login-field">
                 <Lock size={18} />
                 <input
@@ -83,14 +111,22 @@ export const LoginForm: React.FC = () => {
             )}
 
             <button type="submit" className="login-submit" disabled={loading}>
-              {loading ? <span className="login-spinner" /> : <>{mode === 'login' ? <LogIn size={18} /> : <RotateCcw size={18} />} {mode === 'login' ? 'Entrar' : 'Enviar e-mail'}</>}
+              {loading ? <span className="login-spinner" /> : <>{mode === 'login' && <LogIn size={18} />}{mode === 'signup' && <UserPlus size={18} />}{mode === 'reset' && <RotateCcw size={18} />} {mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : 'Enviar e-mail'}</>}
             </button>
           </form>
 
           <div className="login-footer">
-            {mode === 'login' ? (
-              <button onClick={() => setMode('reset')} className="login-link">Esqueceu sua senha?</button>
-            ) : (
+            {mode === 'login' && (
+              <>
+                <button onClick={() => setMode('reset')} className="login-link">Esqueceu sua senha?</button>
+                <span className="login-sep">·</span>
+                <button onClick={() => setMode('signup')} className="login-link">Criar nova conta</button>
+              </>
+            )}
+            {mode === 'signup' && (
+              <button onClick={() => setMode('login')} className="login-link">Já tem conta? Fazer login</button>
+            )}
+            {mode === 'reset' && (
               <button onClick={() => setMode('login')} className="login-link">Voltar ao login</button>
             )}
           </div>

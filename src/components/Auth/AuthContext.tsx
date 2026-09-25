@@ -37,8 +37,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const carregarPerfil = async (uid: string) => {
-    const { data } = await supabase.from('perfis_usuario').select('*').eq('id', uid).maybeSingle();
-    setPerfil(data as PerfilUsuario | null);
+    for (let i = 0; i < 5; i++) {
+      const { data } = await supabase.from('perfis_usuario').select('*').eq('id', uid).maybeSingle();
+      if (data) { setPerfil(data as PerfilUsuario); return; }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    setPerfil(null);
   };
 
   useEffect(() => {

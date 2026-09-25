@@ -80,7 +80,13 @@ function AppContent() {
 
   if (loading) return <div className="loading-screen"><img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" /><span>Carregando seu espaço...</span></div>;
   if (!user) return <LoginForm />;
-  if (!perfil) return <div className="loading-screen"><span>Carregando perfil...</span></div>;
+  if (!perfil) return (
+    <div className="loading-screen">
+      <img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" />
+      <span>Configurando seu acesso...</span>
+      <button className="button button-light" style={{ marginTop: 12 }} onClick={() => void signOut()}>Voltar ao login</button>
+    </div>
+  );
 
   const tipo = perfil.tipo;
   const visibleGroups = menuGroups.filter((g) => g.roles.includes(tipo));

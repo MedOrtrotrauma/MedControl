@@ -54,9 +54,10 @@ button:disabled { cursor: not-allowed; opacity: .65; }
 .login-alert { padding: 12px 14px; border-radius: 8px; font-size: 12px; margin-bottom: 16px; }
 .login-alert.error { color: #8a3030; background: #fbeaea; border: 1px solid #f0caca; }
 .login-alert.success { color: #2e6b4a; background: #e8f5ed; border: 1px solid #c2e0cd; }
-.login-footer { text-align: center; margin-top: 20px; }
+.login-footer { text-align: center; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .login-link { border: 0; background: transparent; color: var(--lilac); font-size: 13px; font-weight: 600; }
 .login-link:hover { color: var(--wine); text-decoration: underline; }
+.login-sep { color: var(--line); font-size: 12px; }
 
 /* ===== App Shell ===== */
 .app-shell { display: flex; min-height: 100vh; }
