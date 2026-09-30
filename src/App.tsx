@@ -44,11 +44,12 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    label: 'Produção mensal', icon: BarChart3, roles: ['administrativo', 'recepcao', 'medico'],
-    items: [
-      { id: 'imagem', label: 'Imagem', icon: FileText },
-      { id: 'particulares', label: 'Particulares', icon: CircleDollarSign },
-    ],
+    label: 'Imagem', icon: FileText, roles: ['administrativo', 'recepcao', 'medico'],
+    items: [{ id: 'imagem', label: 'Imagem', icon: FileText }],
+  },
+  {
+    label: 'Particulares', icon: CircleDollarSign, roles: ['administrativo', 'recepcao', 'medico'],
+    items: [{ id: 'particulares', label: 'Particulares', icon: CircleDollarSign }],
   },
   {
     label: 'Relatórios', icon: FileText, roles: ['administrativo'],
@@ -86,7 +87,7 @@ function AppContent() {
   const [page, setPage] = useState<Page>('repasse_terceiros');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasse médico', 'Produção mensal']));
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasse médico', 'Imagem', 'Particulares']));
 
   if (loading) return <div className="loading-screen"><img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" /><span>Carregando seu espaço...</span></div>;
   if (!user) return <LoginForm />;
