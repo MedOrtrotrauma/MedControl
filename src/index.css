@@ -52,10 +52,9 @@ h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
 /* ===== Login ===== */
 .login-shell {
   min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
-  background: radial-gradient(ellipse at 25% 0%, #4a2d6e 0%, transparent 50%),
-              radial-gradient(ellipse at 75% 100%, #6b4f8c 0%, transparent 50%),
-              linear-gradient(135deg, #3a1f5a 0%, #4a2d6e 50%, #5a3d7e 100%);
-  position: relative; overflow: hidden;
+  background-image: linear-gradient(135deg, rgba(31, 24, 20, .68), rgba(76, 57, 43, .42)), url('/images/WhatsApp_Image_2026-09-25_at_16.22.57.jpeg');
+  background-size: cover; background-position: center; background-attachment: fixed;
+  position: relative; overflow: auto;
 }
 .login-shell::before {
   content: ''; position: absolute; inset: 0;
@@ -129,7 +128,7 @@ h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
 .app-shell { display: flex; min-height: 100vh; }
 .sidebar {
   width: 280px; position: fixed; inset: 0 auto 0 0; z-index: 20;
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
   background: linear-gradient(180deg, #3a1f5a 0%, #4a2d6e 60%, #43276a 100%);
   color: #d4c8e0; padding: 28px 18px 18px;
   transition: width var(--transition), transform var(--transition);
@@ -148,6 +147,7 @@ h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
 .brand span { display: block; color: #b8a8d0; font-size: 10px; margin-top: 3px; letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
 .mobile-close, .mobile-menu { display: none; }
 .sidebar-caption, .menu-label { color: #8a7aa0; font-size: 10px; letter-spacing: .14em; font-weight: 800; text-transform: uppercase; }
+.sidebar nav { flex: 1; min-height: 0; overflow-y: auto; padding-right: 3px; }
 .sidebar-caption { padding: 0 12px 14px; }
 .menu-group { margin-bottom: 20px; }
 .menu-group-header {
@@ -182,7 +182,7 @@ h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
 .account-card span { color: #a898c0; font-size: 10px; max-width: 184px; margin-top: 3px; }
 .avatar, .top-avatar { display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--lilac); flex: 0 0 auto; }
 .avatar { width: 32px; height: 32px; }
-.main-area { width: calc(100% - 280px); margin-left: 280px; min-width: 0; transition: margin-left var(--transition), width var(--transition); }
+.main-area { width: calc(100% - 280px); margin-left: 280px; min-width: 0; min-height: 100vh; transition: margin-left var(--transition), width var(--transition); }
 .sidebar.collapsed + .main-area { width: calc(100% - 88px); margin-left: 88px; }
 .topbar {
   height: 84px; display: flex; align-items: center; justify-content: space-between; padding: 0 48px;
@@ -364,7 +364,7 @@ td small { margin-top: 4px; color: var(--muted); font-size: 10px; }
   .filter-grid { grid-template-columns: 1fr 1fr !important; }
 }
 @media (max-width: 680px) {
-  .sidebar { transform: translateX(-100%); width: 280px !important; }
+  .sidebar { transform: translateX(-100%); width: 280px !important; max-height: 100vh; }
   .sidebar.mobile-open { transform: translateX(0); }
   .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 19; border: 0; background: rgba(58, 31, 90, .46); }
   .main-area, .sidebar.collapsed + .main-area, .sidebar:not(.collapsed) + .main-area { width: 100%; margin-left: 0; }

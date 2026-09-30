@@ -23,9 +23,13 @@ import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
 import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
 
-export const ProducaoMensalComponent: React.FC = () => {
+interface ProducaoMensalProps {
+  initialTab?: 'convenios' | 'particular' | 'repasse-imagem';
+}
+
+export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initialTab = 'convenios' }) => {
   const [activeView, setActiveView] = useState<'form' | 'report'>('form');
-  const [tab, setTab] = useState<'convenios' | 'particular' | 'repasse-imagem'>('convenios');
+  const [tab, setTab] = useState<'convenios' | 'particular' | 'repasse-imagem'>(initialTab);
   const [producoes, setProducoes] = useState<ProducaoMensal[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [convenios, setConvenios] = useState<Convenio[]>([]);

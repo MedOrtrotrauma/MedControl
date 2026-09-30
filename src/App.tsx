@@ -18,6 +18,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { RepasseComponent } from './components/Repasse';
+import { ProducaoMensalComponent } from './components/ProducaoMensal';
 import { RelatoriosComponent } from './components/Relatorios';
 import { MedicosCadastro } from './components/Cadastros/MedicosCadastro';
 import { ConveniosCadastro } from './components/Cadastros/ConveniosCadastro';
@@ -29,7 +30,7 @@ import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
 import type { TipoUsuario } from './components/Auth/AuthContext';
 
-type Page = 'repasse_terceiros' | 'repasse_socios' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'usuarios';
+type Page = 'repasse_terceiros' | 'repasse_socios' | 'imagem' | 'particulares' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'usuarios';
 
 interface MenuItem { id: Page; label: string; icon: typeof BarChart3; }
 interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; roles: TipoUsuario[]; }
@@ -40,6 +41,13 @@ const menuGroups: MenuGroup[] = [
     items: [
       { id: 'repasse_terceiros', label: 'Repasse a terceiros', icon: Users },
       { id: 'repasse_socios', label: 'Repasse a sócios', icon: CircleDollarSign },
+    ],
+  },
+  {
+    label: 'Produção mensal', icon: BarChart3, roles: ['administrativo', 'recepcao', 'medico'],
+    items: [
+      { id: 'imagem', label: 'Imagem', icon: FileText },
+      { id: 'particulares', label: 'Particulares', icon: CircleDollarSign },
     ],
   },
   {
@@ -69,6 +77,8 @@ const pageTitles: Record<Page, string> = {
   unidades: 'Unidades',
   procedimentos: 'Procedimentos',
   usuarios: 'Cadastro de usuários',
+  imagem: 'Imagem',
+  particulares: 'Particulares',
 };
 
 function AppContent() {
@@ -76,7 +86,7 @@ function AppContent() {
   const [page, setPage] = useState<Page>('repasse_terceiros');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasse médico']));
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasse médico', 'Produção mensal']));
 
   if (loading) return <div className="loading-screen"><img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" /><span>Carregando seu espaço...</span></div>;
   if (!user) return <LoginForm />;
@@ -106,6 +116,8 @@ function AppContent() {
     switch (page) {
       case 'repasse_terceiros': return <RepasseComponent tipo="terceiro" />;
       case 'repasse_socios': return <RepasseComponent tipo="socio" />;
+      case 'imagem': return <ProducaoMensalComponent initialTab="repasse-imagem" />;
+      case 'particulares': return <ProducaoMensalComponent initialTab="particular" />;
       case 'relatorios': return <RelatoriosComponent />;
       case 'medicos': return <MedicosCadastro />;
       case 'convenios': return <ConveniosCadastro />;
