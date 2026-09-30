@@ -1495,4 +1495,79 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th colSpan={2} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">MÉDICO</th>
                     <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">TOTAL</th>
-                    <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">IMPOSTO
+                    <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">IMPOSTO {Number(imagemImposto).toFixed(2).replace('.', ',')} %</th>
+                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">TOTAL S/ IMPOSTO</th>
+                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">CLÍNICA 50%</th>
+                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">REPASSE 50%</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">AÇÕES</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {repasseImagemLoading ? (
+                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Carregando lançamentos...</td></tr>
+                  ) : !imagemClinica ? (
+                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Selecione uma clínica para visualizar os lançamentos.</td></tr>
+                  ) : imagemRowsFiltradas.length === 0 ? (
+                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Nenhum lançamento para esta clínica em {formatSelectedMonth(selectedMonth)}.</td></tr>
+                  ) : (
+                    imagemRowsFiltradas.map((item) => {
+                      const total = Number(item.total || 0);
+                      const imposto = total * Number(item.imposto_percentual || 0) / 100;
+                      const semImposto = total - imposto;
+                      const metade = semImposto / 2;
+                      return (
+                        <tr key={item.id} className="hover:bg-blue-50 transition-colors">
+                          <td colSpan={2} className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
+                          <td colSpan={2} className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(total)}</td>
+                          <td colSpan={2} className="px-4 py-3 text-sm text-right text-red-600">{money(imposto)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(semImposto)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-medium text-blue-700">{money(metade)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700">{money(metade)}</td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button onClick={() => openRepasseImagemEdit(item)} className="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded text-xs">Editar</button>
+                              <button onClick={() => deleteRepasseImagem(item.id)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs">Excluir</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                {imagemRowsFiltradas.length > 0 && (
+                  <tfoot className="bg-gray-50 border-t border-gray-200">
+                    <tr>
+                      <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-700">Total</td>
+                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0), 0))}</td>
+                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(imagemRowsFiltradas.reduce((sum, item) => sum + (Number(item.total || 0) * Number(item.imposto_percentual || 0) / 100), 0))}</td>
+                      <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100), 0))}</td>
+                      <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100) / 2, 0))}</td>
+                      <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100) / 2, 0))}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <EditProducaoModal
+        producao={editingProducao}
+        isOpen={!!editingProducao}
+        onClose={() => setEditingProducao(null)}
+        onSave={loadData}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={!!deletingId}
+        onClose={() => setDeletingId(null)}
+        onConfirm={confirmDelete}
+        title="Excluir Produção"
+        message="Tem certeza que deseja excluir este registro de produção? Esta ação não pode ser desfeita."
+        loading={deleteLoading}
+      />
+    </div>
+  );
+};
