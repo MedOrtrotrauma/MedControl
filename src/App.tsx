@@ -37,14 +37,14 @@ interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; 
 
 const menuGroups: MenuGroup[] = [
   {
-    label: 'Repasse médico', icon: CircleDollarSign, roles: ['administrativo', 'recepcao', 'medico'],
+    label: 'Repasse médico', icon: CircleDollarSign, roles: ['administrativo', 'medico'],
     items: [
       { id: 'repasse_terceiros', label: 'Repasse a terceiros', icon: Users },
       { id: 'repasse_socios', label: 'Repasse a sócios', icon: CircleDollarSign },
     ],
   },
   {
-    label: 'Imagem', icon: FileText, roles: ['administrativo', 'recepcao', 'medico'],
+    label: 'Imagem', icon: FileText, roles: ['administrativo', 'medico'],
     items: [{ id: 'imagem', label: 'Imagem', icon: FileText }],
   },
   {
@@ -117,8 +117,8 @@ function AppContent() {
     switch (page) {
       case 'repasse_terceiros': return <RepasseComponent tipo="terceiro" />;
       case 'repasse_socios': return <RepasseComponent tipo="socio" />;
-      case 'imagem': return <ProducaoMensalComponent initialTab="repasse-imagem" />;
-      case 'particulares': return <ProducaoMensalComponent initialTab="particular" />;
+      case 'imagem': return <ProducaoMensalComponent initialTab="repasse-imagem" visibleTabs={['repasse-imagem']} />;
+      case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'relatorios': return <RelatoriosComponent />;
       case 'medicos': return <MedicosCadastro />;
       case 'convenios': return <ConveniosCadastro />;

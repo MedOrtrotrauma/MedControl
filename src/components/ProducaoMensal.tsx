@@ -25,9 +25,10 @@ import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
 
 interface ProducaoMensalProps {
   initialTab?: 'convenios' | 'particular' | 'repasse-imagem';
+  visibleTabs?: Array<'convenios' | 'particular' | 'repasse-imagem'>;
 }
 
-export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initialTab = 'convenios' }) => {
+export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initialTab = 'convenios', visibleTabs }) => {
   const [activeView, setActiveView] = useState<'form' | 'report'>('form');
   const [tab, setTab] = useState<'convenios' | 'particular' | 'repasse-imagem'>(initialTab);
   const [producoes, setProducoes] = useState<ProducaoMensal[]>([]);
@@ -582,42 +583,30 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         </div>
       </div>
 
-      {/* ABAS: Convênios / Particular */}
-      <div className="flex gap-2 border-b border-gray-200">
-        <button
-          onClick={() => setTab('convenios')}
-          className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${
-            tab === 'convenios'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <Building size={18} className="inline mr-2" />
-          Convênios
-        </button>
-        <button
-          onClick={() => setTab('particular')}
-          className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${
-            tab === 'particular'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <User size={18} className="inline mr-2" />
-          Particular
-        </button>
-        <button
-          onClick={() => setTab('repasse-imagem')}
-          className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${
-            tab === 'repasse-imagem'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <Building size={18} className="inline mr-2" />
-          Repasse imagem
-        </button>
-      </div>
+      {/* ABAS: mostradas conforme visibleTabs */}
+      {(() => {
+        const show = visibleTabs ?? ['convenios', 'particular', 'repasse-imagem'];
+        if (show.length <= 1) return null;
+        return (
+          <div className="flex gap-2 border-b border-gray-200">
+            {show.includes('convenios') && (
+              <button onClick={() => setTab('convenios')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'convenios' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                <Building size={18} className="inline mr-2" />Convênios
+              </button>
+            )}
+            {show.includes('particular') && (
+              <button onClick={() => setTab('particular')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'particular' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                <User size={18} className="inline mr-2" />Particular
+              </button>
+            )}
+            {show.includes('repasse-imagem') && (
+              <button onClick={() => setTab('repasse-imagem')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'repasse-imagem' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                <Building size={18} className="inline mr-2" />Repasse imagem
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* === ABA CONVÊNIOS === */}
       {tab === 'convenios' && (
