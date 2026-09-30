@@ -181,7 +181,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       quantidade: 1,
       valor: valor,
       valor_repasse: valorRepasse,
-      check_conferencia: particularForm.check_conferencia,
       unidade: particularForm.unidade.trim() || null,
       vinculo: particularForm.vinculo,
       desconto_paciente: 0,
