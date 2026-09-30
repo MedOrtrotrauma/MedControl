@@ -46,12 +46,12 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
   const [dataInicio, setDataInicio] = useState<string>('');
   const [dataFim, setDataFim] = useState<string>('');
   const [selectedTipo, setSelectedTipo] = useState<string>('');
-  
-  // NOVOS ESTADOS: Filtros por paciente e convênio
+
+  // Filtros por paciente e convênio
   const [filtroPaciente, setFiltroPaciente] = useState<string>('');
   const [filtroConvenio, setFiltroConvenio] = useState<string>('');
-  
-  // NOVO ESTADO: Mês de Referência
+
+  // Mês de Referência
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const today = new Date();
     return today.toISOString().slice(0, 7); // 'YYYY-MM'
@@ -118,16 +118,17 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setParticularLoading(false);
   };
 
+  // ✅ ALTERADO: campos alinhados ao schema real
   const particularFormInitial = () => ({
-    unidade: '',
+    unidade_id: '',
     medico_id: '',
     nome_paciente: '',
     data_cirurgia: '',
-    vinculo: 'socio' as 'externo' | 'socio',
+    destinatario_tipo: 'socio' as 'socio' | 'terceiro',
     tipo_procedimento: '',
     forma_pagamento: 'pix' as 'pix' | 'credito' | 'debito' | 'especie',
     valor: '',
-    valor_repasse: '',
+    valor_repasse_medico: '',
     check_conferencia: false,
     month_reference: selectedMonth,
   });
@@ -139,18 +140,19 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setShowParticularForm(true);
   };
 
+  // ✅ ALTERADO: usa unidade_id, destinatario_tipo, valor_repasse_medico
   const openParticularEdit = (item: Repasse) => {
     setEditingParticular(item);
     setParticularForm({
-      unidade: item.unidade || '',
+      unidade_id: item.unidade_id ? String(item.unidade_id) : '',
       medico_id: String(item.medico_id),
       nome_paciente: item.nome_paciente,
       data_cirurgia: item.data_cirurgia,
-      vinculo: (item.vinculo || 'socio') as 'externo' | 'socio',
+      destinatario_tipo: (item.destinatario_tipo || 'socio') as 'socio' | 'terceiro',
       tipo_procedimento: item.tipo_procedimento || '',
       forma_pagamento: (item.forma_pagamento || 'pix') as 'pix' | 'credito' | 'debito' | 'especie',
       valor: String(item.valor || 0),
-      valor_repasse: String(item.valor_repasse || 0),
+      valor_repasse_medico: String(item.valor_repasse_medico || 0),
       check_conferencia: item.check_conferencia || false,
       month_reference: item.month_reference || selectedMonth,
     });
@@ -159,6 +161,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
 
   const num = (v: string) => Math.max(0, Number(v.replace(',', '.')) || 0);
 
+  // ✅ ALTERADO: payload só com colunas existentes no banco
   const saveParticular = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!particularForm.medico_id || !particularForm.nome_paciente || !particularForm.data_cirurgia) {
@@ -167,7 +170,8 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     }
     setParticularLoading(true);
     const valor = num(particularForm.valor);
-    const valorRepasse = num(particularForm.valor_repasse);
+    const valorRepasse = num(particularForm.valor_repasse_medico);
+
     const payload = {
       medico_id: Number(particularForm.medico_id),
       hospital_id: null,
@@ -180,24 +184,33 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       forma_pagamento: particularForm.forma_pagamento,
       quantidade: 1,
       valor: valor,
-      valor_repasse: valorRepasse,
-      unidade: particularForm.unidade.trim() || null,
-      vinculo: particularForm.vinculo,
+      valor_repasse_medico: valorRepasse,
+      unidade_id: particularForm.unidade_id ? Number(particularForm.unidade_id) : null,
       desconto_paciente: 0,
       desconto_cartao: 0,
       valor_glosa: 0,
       valor_recebido: valor,
-      destinatario_tipo: particularForm.vinculo === 'externo' ? 'terceiro' as const : 'socio' as const,
-      auxilio_1: 0, auxilio_2: 0, taxa_1_5: 0, imposto_percentual: 0, outras_deducoes: 0,
-      valor_liquido: valor, percentual_terceiro: 0, valor_terceiro: 0, saldo_controle: 0,
+      destinatario_tipo: particularForm.destinatario_tipo,
+      auxilio_1: 0,
+      auxilio_2: 0,
+      taxa_1_5: 0,
+      imposto_percentual: 0,
+      outras_deducoes: 0,
+      valor_liquido: valor,
+      percentual_terceiro: 0,
+      valor_terceiro: 0,
+      saldo_controle: 0,
       month_reference: particularForm.month_reference,
       observacao: null,
       status_pagamento: 'pendente' as const,
       data_pagamento: null,
+      check_conferencia: particularForm.check_conferencia,
     };
+
     const result = editingParticular
       ? await dbHelpers.updateRepasse(editingParticular.id, payload)
       : await dbHelpers.createRepasse(payload);
+
     if (result.error) {
       alert('Erro ao salvar: ' + result.error.message);
     } else {
@@ -286,8 +299,9 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     return text.includes(particularSearch.toLowerCase()) && (!particularMedico || String(item.medico_id) === particularMedico);
   });
 
+  // ✅ ALTERADO: usa valor_repasse_medico
   const particularTotal = filteredParticulares.reduce((sum, item) => sum + Number(item.valor || 0), 0);
-  const particularRepasse = filteredParticulares.reduce((sum, item) => sum + Number(item.valor_repasse || 0), 0);
+  const particularRepasse = filteredParticulares.reduce((sum, item) => sum + Number(item.valor_repasse_medico || 0), 0);
   const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 
   const imagemRowsFiltradas = repassesImagem.filter((item) => !imagemClinica || String(item.hospital_id) === imagemClinica);
@@ -296,22 +310,21 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
   const generateMonthOptions = () => {
     const months = [];
     const today = new Date();
-    
-    // Últimos 6 meses e próximos 3 meses
+
     for (let i = -6; i <= 3; i++) {
       const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
       const value = date.toISOString().slice(0, 7);
-      const label = date.toLocaleDateString('pt-BR', { 
-        month: 'long', 
-        year: 'numeric' 
+      const label = date.toLocaleDateString('pt-BR', {
+        month: 'long',
+        year: 'numeric'
       });
-      
-      months.push({ 
-        value, 
-        label: label.charAt(0).toUpperCase() + label.slice(1) 
+
+      months.push({
+        value,
+        label: label.charAt(0).toUpperCase() + label.slice(1)
       });
     }
-    
+
     return months;
   };
 
@@ -319,16 +332,15 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
   const formatSelectedMonth = (month: string) => {
     const [year, monthNum] = month.split('-');
     const date = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
-    return date.toLocaleDateString('pt-BR', { 
-      month: 'long', 
-      year: 'numeric' 
+    return date.toLocaleDateString('pt-BR', {
+      month: 'long',
+      year: 'numeric'
     });
   };
 
-  // Restante das funções permanecem iguais...
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
-    
+
     try {
       const dateOnly = dateString.split('T')[0];
       if (dateOnly.includes('-')) {
@@ -347,12 +359,12 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.medico_id) {
       alert('Por favor, selecione um médico');
       return;
     }
-    
+
     if (!formData.convenio_id) {
       alert('Por favor, selecione um convênio');
       return;
@@ -361,7 +373,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setLoading(true);
 
     try {
-      // MODIFICADO: Incluir month_reference no objeto de criação
       const result = await dbHelpers.createProducaoMensal({
         medico_id: parseInt(formData.medico_id),
         convenio_id: parseInt(formData.convenio_id),
@@ -369,7 +380,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         data_consulta: formData.data_consulta,
         valor: parseFloat(formData.valor),
         tipo: formData.tipo,
-        month_reference: formData.month_reference // Novo campo
+        month_reference: formData.month_reference
       });
 
       if (result.error) {
@@ -383,7 +394,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
           data_consulta: '',
           valor: '',
           tipo: 'consulta',
-          month_reference: selectedMonth // Reset para o mês atual
+          month_reference: selectedMonth
         });
         setShowForm(false);
         loadData();
@@ -396,7 +407,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setLoading(false);
   };
 
-  // Estado do formulário atualizado com month_reference
   const [formData, setFormData] = useState({
     medico_id: '',
     convenio_id: '',
@@ -404,10 +414,9 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     data_consulta: '',
     valor: '',
     tipo: 'consulta' as 'consulta' | 'cirurgia',
-    month_reference: selectedMonth // Inicializar com o mês selecionado
+    month_reference: selectedMonth
   });
 
-  // Atualizar formData quando selectedMonth mudar
   useEffect(() => {
     setFormData(prev => ({
       ...prev,
@@ -415,7 +424,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     }));
   }, [selectedMonth]);
 
-  // Restante das funções permanecem iguais...
   const handleEdit = (producao: ProducaoMensal) => {
     setEditingProducao(producao);
   };
@@ -445,27 +453,24 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setActiveView('form');
   };
 
-  // MODIFICADO: Filtrar produções incluindo os novos filtros
   const filteredProducoes = producoes.filter(p => {
     const matchesMedico = selectedMedico ? p.medico_id === parseInt(selectedMedico) : true;
     const matchesDataInicio = dataInicio ? p.data_consulta >= dataInicio : true;
     const matchesDataFim = dataFim ? p.data_consulta <= dataFim : true;
     const matchesTipo = selectedTipo ? p.tipo === selectedTipo : true;
-    const matchesPaciente = filtroPaciente ? 
+    const matchesPaciente = filtroPaciente ?
       p.nome_paciente.toLowerCase().includes(filtroPaciente.toLowerCase()) : true;
-    const matchesConvenio = filtroConvenio ? 
+    const matchesConvenio = filtroConvenio ?
       p.convenio_id === parseInt(filtroConvenio) : true;
-    
-    return matchesMedico && matchesDataInicio && matchesDataFim && 
-           matchesTipo && matchesPaciente && matchesConvenio;
+
+    return matchesMedico && matchesDataInicio && matchesDataFim &&
+      matchesTipo && matchesPaciente && matchesConvenio;
   });
 
-  // Calcular totais
   const totalPeriodo = filteredProducoes.reduce((sum, item) => sum + item.valor, 0);
   const totalMedicoSelecionado = filteredProducoes.reduce((sum, item) => sum + item.valor, 0);
   const cincoPorCentoMedico = totalMedicoSelecionado * 0.05;
 
-  // Função para limpar todos os filtros
   const limparTodosFiltros = () => {
     setSelectedMedico('');
     setDataInicio('');
@@ -475,7 +480,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setFiltroConvenio('');
   };
 
-  // Verificar se há algum filtro ativo
   const hasActiveFilters = selectedMedico || dataInicio || dataFim || selectedTipo || filtroPaciente || filtroConvenio;
 
   if (activeView === 'report') {
@@ -494,7 +498,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
           onEdit={handleEdit}
           onDelete={handleDelete}
           onNew={handleNew}
-          selectedMonth={selectedMonth} // Passar o mês selecionado
+          selectedMonth={selectedMonth}
         />
 
         <EditProducaoModal
@@ -518,7 +522,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
 
   return (
     <div className="space-y-6">
-      {/* Header Section - MODIFICADO */}
+      {/* Header Section */}
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
           <div className="bg-gradient-to-r from-green-500 to-green-600 p-2 rounded-lg">
@@ -526,8 +530,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
           </div>
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Produção Mensal</h2>
-            
-            {/* NOVO: Seletor de Mês */}
+
             <div className="relative mt-1">
               <button
                 onClick={() => setShowMonthSelector(!showMonthSelector)}
@@ -550,8 +553,8 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                         setShowMonthSelector(false);
                       }}
                       className={`w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors ${
-                        month.value === selectedMonth 
-                          ? 'bg-blue-100 text-blue-700 font-medium' 
+                        month.value === selectedMonth
+                          ? 'bg-blue-100 text-blue-700 font-medium'
                           : 'text-gray-700'
                       }`}
                     >
@@ -582,7 +585,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         </div>
       </div>
 
-      {/* ABAS: mostradas conforme visibleTabs */}
+      {/* ABAS */}
       {(() => {
         const show = visibleTabs ?? ['convenios', 'particular', 'repasse-imagem'];
         if (show.length <= 1) return null;
@@ -611,7 +614,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       {tab === 'convenios' && (
       <>
 
-      {/* MODIFICADO: Filtro por médico - ADICIONADOS NOVOS FILTROS */}
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
@@ -620,7 +622,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
             </div>
             <span className="font-semibold text-gray-800">Filtros:</span>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
@@ -699,7 +701,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               />
             </div>
           </div>
-          
+
           {hasActiveFilters && (
             <div className="flex gap-2">
               <button
@@ -713,7 +715,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         </div>
       </div>
 
-      {/* Summary Cards - MANTIDO */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center justify-between">
@@ -733,7 +735,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
             </div>
           </div>
         </div>
-        
+
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center justify-between">
             <div>
@@ -748,7 +750,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
             </div>
           </div>
         </div>
-        
+
         {selectedMedico && (
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
@@ -765,7 +767,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
             </div>
           </div>
         )}
-        
+
         {!selectedMedico && (
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
@@ -784,7 +786,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         )}
       </div>
 
-      {/* Formulário de Nova Consulta - MODIFICADO */}
+      {/* Formulário de Nova Consulta */}
       {showForm && (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
           <div className="flex items-center gap-2 mb-6">
@@ -795,7 +797,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
             onSubmit={handleSubmit}
             className="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
-            {/* NOVO CAMPO: Mês de Referência */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Mês de Referência *
@@ -953,7 +954,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         </div>
       )}
 
-      {/* MODIFICADO: Lista de Produções - Adicionados indicadores dos filtros ativos */}
+      {/* Lista de Produções */}
       {!showForm && (
         <div className="bg-white rounded-xl shadow-lg border border-gray-100">
           <div className="p-6 border-b border-gray-200">
@@ -970,7 +971,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               </div>
             </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
@@ -1024,8 +1025,8 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${
-                          producao.tipo === 'cirurgia' 
-                            ? 'bg-red-100 text-red-800' 
+                          producao.tipo === 'cirurgia'
+                            ? 'bg-red-100 text-red-800'
                             : 'bg-blue-100 text-blue-800'
                         }`}>
                           {producao.tipo === 'cirurgia' ? (
@@ -1057,8 +1058,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               </tbody>
             </table>
           </div>
-          
-          {/* MODIFICADO: Footer com totais - Inclui informações dos filtros */}
+
           {hasActiveFilters && filteredProducoes.length > 0 && (
             <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-t border-gray-200">
               <div className="flex justify-between items-center">
@@ -1086,7 +1086,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               </div>
             </div>
           )}
-          
+
           {filteredProducoes.length > 10 && (
             <div className="p-4 text-center border-t border-gray-200">
               <button
@@ -1202,13 +1202,13 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
                 <select
-                  value={particularForm.unidade}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, unidade: e.target.value }))}
+                  value={particularForm.unidade_id}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, unidade_id: e.target.value }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 >
                   <option value="">Selecione a unidade</option>
                   {unidades.map((u) => (
-                    <option key={u.id} value={u.nome}>{u.nome}</option>
+                    <option key={u.id} value={u.id}>{u.nome}</option>
                   ))}
                 </select>
               </div>
@@ -1229,12 +1229,12 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Vínculo</label>
                 <select
-                  value={particularForm.vinculo}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, vinculo: e.target.value as 'externo' | 'socio' }))}
+                  value={particularForm.destinatario_tipo}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, destinatario_tipo: e.target.value as 'socio' | 'terceiro' }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 >
                   <option value="socio">Sócio</option>
-                  <option value="externo">Externo</option>
+                  <option value="terceiro">Externo</option>
                 </select>
               </div>
               <div>
@@ -1301,8 +1301,8 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                   type="number"
                   min="0"
                   step="0.01"
-                  value={particularForm.valor_repasse}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, valor_repasse: e.target.value }))}
+                  value={particularForm.valor_repasse_medico}
+                  onChange={(e) => setParticularForm((p) => ({ ...p, valor_repasse_medico: e.target.value }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
@@ -1355,17 +1355,18 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                   <span className="block text-sm">Nenhum lançamento particular encontrado para este mês.</span>
                 </td></tr>
               ) : filteredParticulares.map((item) => {
+                const unidadeNome = unidades.find(u => u.id === item.unidade_id)?.nome || '-';
                 return (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-700">{item.unidade || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{unidadeNome}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{formatDate(item.data_cirurgia)}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{item.vinculo === 'externo' ? 'Externo' : 'Sócio'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{item.destinatario_tipo === 'terceiro' ? 'Externo' : 'Sócio'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{item.nome_paciente}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{item.tipo_procedimento || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{item.forma_pagamento || '-'}</td>
                     <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(item.valor)}</td>
-                    <td className="px-4 py-3 text-sm text-right font-medium text-teal-700">{money(item.valor_repasse)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-teal-700">{money(item.valor_repasse_medico)}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${item.check_conferencia ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
                         {item.check_conferencia ? '✓' : ''}
@@ -1494,79 +1495,4 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th colSpan={2} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">MÉDICO</th>
                     <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">TOTAL</th>
-                    <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">IMPOSTO {Number(imagemImposto).toFixed(2).replace('.', ',')} %</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">TOTAL S/ IMPOSTO</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">CLÍNICA 50%</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">REPASSE 50%</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">AÇÕES</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {repasseImagemLoading ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Carregando lançamentos...</td></tr>
-                  ) : !imagemClinica ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Selecione uma clínica para visualizar os lançamentos.</td></tr>
-                  ) : imagemRowsFiltradas.length === 0 ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Nenhum lançamento para esta clínica em {formatSelectedMonth(selectedMonth)}.</td></tr>
-                  ) : (
-                    imagemRowsFiltradas.map((item) => {
-                      const total = Number(item.total || 0);
-                      const imposto = total * Number(item.imposto_percentual || 0) / 100;
-                      const semImposto = total - imposto;
-                      const metade = semImposto / 2;
-                      return (
-                        <tr key={item.id} className="hover:bg-blue-50 transition-colors">
-                          <td colSpan={2} className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
-                          <td colSpan={2} className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(total)}</td>
-                          <td colSpan={2} className="px-4 py-3 text-sm text-right text-red-600">{money(imposto)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(semImposto)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-blue-700">{money(metade)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700">{money(metade)}</td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button onClick={() => openRepasseImagemEdit(item)} className="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded text-xs">Editar</button>
-                              <button onClick={() => deleteRepasseImagem(item.id)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs">Excluir</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-                {imagemRowsFiltradas.length > 0 && (
-                  <tfoot className="bg-gray-50 border-t border-gray-200">
-                    <tr>
-                      <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-700">Total</td>
-                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0), 0))}</td>
-                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(imagemRowsFiltradas.reduce((sum, item) => sum + (Number(item.total || 0) * Number(item.imposto_percentual || 0) / 100), 0))}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100), 0))}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100) / 2, 0))}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100) / 2, 0))}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <EditProducaoModal
-        producao={editingProducao}
-        isOpen={!!editingProducao}
-        onClose={() => setEditingProducao(null)}
-        onSave={loadData}
-      />
-
-      <ConfirmDeleteModal
-        isOpen={!!deletingId}
-        onClose={() => setDeletingId(null)}
-        onConfirm={confirmDelete}
-        title="Excluir Produção"
-        message="Tem certeza que deseja excluir este registro de produção? Esta ação não pode ser desfeita."
-        loading={deleteLoading}
-      />
-    </div>
-  );
-};
+                    <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">IMPOSTO
