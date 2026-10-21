@@ -65,6 +65,8 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
   const [editingParticular, setEditingParticular] = useState<Repasse | null>(null);
   const [particularSearch, setParticularSearch] = useState('');
   const [particularMedico, setParticularMedico] = useState('');
+  // View interna da aba particular: 'form' (lançamentos) ou 'report' (relatório)
+  const [particularView, setParticularView] = useState<'form' | 'report'>('form');
 
   // === REPASSE IMAGEM ===
   const [repassesImagem, setRepassesImagem] = useState<RepasseImagem[]>([]);
@@ -595,19 +597,28 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         {!showOnlyImagem && (
           <div className="flex gap-3">
             <button
-              onClick={() => setActiveView('report')}
+              onClick={() => {
+                if (tab === 'particular') {
+                  setParticularView(particularView === 'report' ? 'form' : 'report');
+                } else {
+                  setActiveView('report');
+                }
+              }}
               className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               <BarChart3 size={20} />
-              Relatório
+              {tab === 'particular' && particularView === 'report' ? 'Voltar aos Lançamentos' : 'Relatório'}
             </button>
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            >
-              <Plus size={20} />
-              Nova Consulta
-            </button>
+            {/* Nova Consulta só aparece fora da aba particular */}
+            {tab !== 'particular' && (
+              <button
+                onClick={() => setShowForm(!showForm)}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+              >
+                <Plus size={20} />
+                Nova Consulta
+              </button>
+            )}
           </div>
         )}
 
@@ -635,7 +646,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         return (
           <div className="flex gap-2 border-b border-gray-200">
             {show.includes('convenios') && (
-              <button onClick={() => { setTab('convenios'); setImagemView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'convenios' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => { setTab('convenios'); setImagemView('form'); setParticularView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'convenios' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                 <Building size={18} className="inline mr-2" />Convênios
               </button>
             )}
@@ -645,7 +656,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               </button>
             )}
             {show.includes('repasse-imagem') && (
-              <button onClick={() => setTab('repasse-imagem')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'repasse-imagem' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => { setTab('repasse-imagem'); setParticularView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'repasse-imagem' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                 <Building size={18} className="inline mr-2" />Repasse imagem
               </button>
             )}
@@ -1148,7 +1159,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       )}
 
       {/* === ABA PARTICULAR === */}
-      {tab === 'particular' && (
+      {tab === 'particular' && particularView === 'form' && (
       <>
 
       {/* Summary Cards - Particular */}
@@ -1444,6 +1455,19 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       </div>
 
       </>
+      )}
+
+      {/* === ABA PARTICULAR: RELATÓRIO === */}
+      {tab === 'particular' && particularView === 'report' && (
+        <ParticularReport
+          particulares={particulares}
+          medicos={medicos}
+          unidades={unidades}
+          selectedMonth={selectedMonth}
+          formatSelectedMonth={formatSelectedMonth}
+          formatDate={formatDate}
+          money={money}
+        />
       )}
 
       {/* === ABA REPASSE IMAGEM === */}
@@ -1927,6 +1951,246 @@ const RepasseImagemReport: React.FC<RepasseImagemReportProps> = ({
                   <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(semImposto)}</td>
                   <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(ficouNaCasa)}</td>
                   <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(foiParaMedicos)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ============================================================
+ * Relatório de Particular
+ * KPIs: valor recebido, valor de repasse médico, líquido da casa
+ * Filtros: médico + período (data início/fim)
+ * Tabela detalhada + totais
+ * ============================================================ */
+interface ParticularReportProps {
+  particulares: Repasse[];
+  medicos: Medico[];
+  unidades: Unidade[];
+  selectedMonth: string;
+  formatSelectedMonth: (month: string) => string;
+  formatDate: (date: string) => string;
+  money: (value: number) => string;
+}
+
+const ParticularReport: React.FC<ParticularReportProps> = ({
+  particulares,
+  medicos,
+  unidades,
+  selectedMonth,
+  formatSelectedMonth,
+  formatDate,
+  money,
+}) => {
+  const [filtroMedico, setFiltroMedico] = useState('');
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
+
+  // Normaliza data (yyyy-mm-dd) para comparação
+  const toISODate = (d: string) => (d ? d.split('T')[0] : '');
+
+  const rows = particulares.filter((item) => {
+    const matchMedico = !filtroMedico || String(item.medico_id) === filtroMedico;
+    const itemDate = toISODate(item.data_cirurgia);
+    const matchInicio = !dataInicio || itemDate >= dataInicio;
+    const matchFim = !dataFim || itemDate <= dataFim;
+    return matchMedico && matchInicio && matchFim;
+  });
+
+  const totalRecebido = rows.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+  const totalRepasse = rows.reduce((sum, item) => sum + Number(item.valor_repasse_medico || 0), 0);
+  const liquidoCasa = totalRecebido - totalRepasse;
+
+  // Agrupamento por médico (subtotais)
+  const grupos = medicos
+    .map((medico) => {
+      const linhas = rows.filter((r) => r.medico_id === medico.id);
+      if (linhas.length === 0) return null;
+      const recebido = linhas.reduce((s, r) => s + Number(r.valor || 0), 0);
+      const repasse = linhas.reduce((s, r) => s + Number(r.valor_repasse_medico || 0), 0);
+      return {
+        medico,
+        linhas,
+        recebido,
+        repasse,
+        liquido: recebido - repasse,
+        qtd: linhas.length,
+      };
+    })
+    .filter(Boolean) as Array<{
+      medico: Medico;
+      linhas: Repasse[];
+      recebido: number;
+      repasse: number;
+      liquido: number;
+      qtd: number;
+    }>;
+
+  const unidadeNome = (id?: number | null) => {
+    if (!id) return '-';
+    return unidades.find((u) => u.id === id)?.nome || '-';
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Filtros */}
+      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="bg-emerald-100 p-2 rounded-lg">
+            <Filter className="h-5 w-5 text-emerald-600" />
+          </div>
+          <span className="font-semibold text-gray-800">Filtros do relatório</span>
+          <span className="text-sm text-gray-500 ml-auto">Mês: {formatSelectedMonth(selectedMonth)}</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
+            <select
+              value={filtroMedico}
+              onChange={(e) => setFiltroMedico(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">Todos os médicos</option>
+              {medicos.map((m) => (
+                <option key={m.id} value={m.id}>{m.nome}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Data Início</label>
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Data Fim</label>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+        {(filtroMedico || dataInicio || dataFim) && (
+          <button
+            onClick={() => { setFiltroMedico(''); setDataInicio(''); setDataFim(''); }}
+            className="mt-4 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-emerald-100 text-sm font-medium">Valor Recebido</p>
+              <p className="text-2xl font-bold">{money(totalRecebido)}</p>
+              <p className="text-emerald-200 text-xs mt-1">{rows.length} lançamento{rows.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg"><DollarSign className="h-6 w-6" /></div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-teal-100 text-sm font-medium">Repasse Médico</p>
+              <p className="text-2xl font-bold">{money(totalRepasse)}</p>
+              <p className="text-teal-200 text-xs mt-1">Total pago aos médicos</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg"><TrendingUp className="h-6 w-6" /></div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium">Líquido da Casa</p>
+              <p className="text-2xl font-bold">{money(liquidoCasa)}</p>
+              <p className="text-blue-200 text-xs mt-1">Recebido − Repasse</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg"><Building className="h-6 w-6" /></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Detalhamento */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Detalhamento por médico</h3>
+          <p className="text-sm text-gray-500">
+            Totais consolidados de {formatSelectedMonth(selectedMonth)}
+            {filtroMedico && ` — ${medicos.find((m) => String(m.id) === filtroMedico)?.nome}`}
+            {(dataInicio || dataFim) && ` — período ${dataInicio ? formatDate(dataInicio) : '...'} a ${dataFim ? formatDate(dataFim) : '...'}`}
+          </p>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="px-6 py-12 text-center text-gray-500">
+            <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+            <p className="text-lg font-medium">Nenhum lançamento para os filtros selecionados</p>
+            <p className="text-sm">Ajuste os filtros ou selecione outro mês.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1080px]">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Médico</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unidade</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Data</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Paciente</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Procedimento</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Valor Recebido</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Repasse Médico</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Líquido Casa</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {grupos.map((grupo) => (
+                  <React.Fragment key={grupo.medico.id}>
+                    <tr className="bg-emerald-50/60">
+                      <td colSpan={5} className="px-4 py-2 text-sm font-bold text-emerald-800">
+                        {grupo.medico.nome} — {grupo.qtd} lançamento{grupo.qtd !== 1 ? 's' : ''}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-gray-900">{money(grupo.recebido)}</td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-teal-700">{money(grupo.repasse)}</td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-blue-700">{money(grupo.liquido)}</td>
+                    </tr>
+                    {grupo.linhas.map((linha) => {
+                      const recebido = Number(linha.valor || 0);
+                      const repasse = Number(linha.valor_repasse_medico || 0);
+                      return (
+                        <tr key={linha.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 text-sm text-gray-700">{linha.medico?.nome || grupo.medico.nome}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{unidadeNome(linha.unidade_id)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{formatDate(linha.data_cirurgia)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{linha.nome_paciente}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{linha.tipo_procedimento || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-900">{money(recebido)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-teal-700">{money(repasse)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-blue-700">{money(recebido - repasse)}</td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colSpan={5} className="px-4 py-3 text-sm font-bold text-gray-900">TOTAL GERAL</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(totalRecebido)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-teal-700">{money(totalRepasse)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(liquidoCasa)}</td>
                 </tr>
               </tfoot>
             </table>
