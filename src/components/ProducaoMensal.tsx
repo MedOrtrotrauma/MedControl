@@ -74,6 +74,10 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
   const [imagemMedico, setImagemMedico] = useState('');
   const [imagemTotal, setImagemTotal] = useState('');
   const [editingRepasseImagem, setEditingRepasseImagem] = useState<RepasseImagem | null>(null);
+  // Filtro por médico na aba imagem (separado do formulário)
+  const [imagemMedicoFiltro, setImagemMedicoFiltro] = useState('');
+  // View interna da aba imagem: 'form' (lançamentos) ou 'report' (relatório)
+  const [imagemView, setImagemView] = useState<'form' | 'report'>('form');
 
   // Carregar dados quando o mês selecionado mudar
   useEffect(() => {
@@ -118,7 +122,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setParticularLoading(false);
   };
 
-  // ✅ ALTERADO: campos alinhados ao schema real
   const particularFormInitial = () => ({
     unidade_id: '',
     medico_id: '',
@@ -140,7 +143,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setShowParticularForm(true);
   };
 
-  // ✅ ALTERADO: usa unidade_id, destinatario_tipo, valor_repasse_medico
   const openParticularEdit = (item: Repasse) => {
     setEditingParticular(item);
     setParticularForm({
@@ -161,7 +163,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
 
   const num = (v: string) => Math.max(0, Number(v.replace(',', '.')) || 0);
 
-  // ✅ ALTERADO: payload só com colunas existentes no banco
   const saveParticular = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!particularForm.medico_id || !particularForm.nome_paciente || !particularForm.data_cirurgia) {
@@ -299,12 +300,32 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     return text.includes(particularSearch.toLowerCase()) && (!particularMedico || String(item.medico_id) === particularMedico);
   });
 
-  // ✅ ALTERADO: usa valor_repasse_medico
   const particularTotal = filteredParticulares.reduce((sum, item) => sum + Number(item.valor || 0), 0);
   const particularRepasse = filteredParticulares.reduce((sum, item) => sum + Number(item.valor_repasse_medico || 0), 0);
   const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 
-  const imagemRowsFiltradas = repassesImagem.filter((item) => !imagemClinica || String(item.hospital_id) === imagemClinica);
+  // === REPASSE IMAGEM: filtros e cálculos ===
+  // Linhas filtradas por clínica E por médico (filtro de médico aplicado na aba)
+  const imagemRowsFiltradas = repassesImagem.filter((item) => {
+    const matchClinica = !imagemClinica || String(item.hospital_id) === imagemClinica;
+    const matchMedico = !imagemMedicoFiltro || String(item.medico_id) === imagemMedicoFiltro;
+    return matchClinica && matchMedico;
+  });
+
+  // KPIs de imagem (baseados no form do contexto: total + imposto_percentual por linha)
+  const calcularKpisImagem = (rows: RepasseImagem[]) => {
+    const totalRecebido = rows.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const totalImposto = rows.reduce(
+      (sum, item) => sum + (Number(item.total || 0) * Number(item.imposto_percentual || 0)) / 100,
+      0
+    );
+    const semImposto = totalRecebido - totalImposto;
+    const ficouNaCasa = semImposto / 2;
+    const foiParaMedicos = semImposto / 2;
+    return { totalRecebido, totalImposto, ficouNaCasa, foiParaMedicos, semImposto };
+  };
+
+  const kpisImagem = calcularKpisImagem(imagemRowsFiltradas);
 
   // Função para gerar opções de meses
   const generateMonthOptions = () => {
@@ -328,7 +349,6 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     return months;
   };
 
-  // Função para formatar o mês selecionado para exibição
   const formatSelectedMonth = (month: string) => {
     const [year, monthNum] = month.split('-');
     const date = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
@@ -520,16 +540,20 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     );
   }
 
+  const showOnlyImagem = tab === 'repasse-imagem';
+
   return (
     <div className="space-y-6">
       {/* Header Section */}
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-r from-green-500 to-green-600 p-2 rounded-lg">
-            <TrendingUp className="h-6 w-6 text-white" />
+          <div className={`p-2 rounded-lg bg-gradient-to-r ${showOnlyImagem ? 'from-indigo-500 to-indigo-600' : 'from-green-500 to-green-600'}`}>
+            {showOnlyImagem ? <Building className="h-6 w-6 text-white" /> : <TrendingUp className="h-6 w-6 text-white" />}
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Produção Mensal</h2>
+            <h2 className="text-2xl font-bold text-gray-900">
+              {showOnlyImagem ? 'Repasse Imagem' : 'Produção Mensal'}
+            </h2>
 
             <div className="relative mt-1">
               <button
@@ -567,22 +591,41 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
           </div>
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => setActiveView('report')}
-            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-          >
-            <BarChart3 size={20} />
-            Relatório
-          </button>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-          >
-            <Plus size={20} />
-            Nova Consulta
-          </button>
-        </div>
+        {/* Ações do header: escondidas na aba imagem */}
+        {!showOnlyImagem && (
+          <div className="flex gap-3">
+            <button
+              onClick={() => setActiveView('report')}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            >
+              <BarChart3 size={20} />
+              Relatório
+            </button>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            >
+              <Plus size={20} />
+              Nova Consulta
+            </button>
+          </div>
+        )}
+
+        {showOnlyImagem && (
+          <div className="flex gap-3">
+            <button
+              onClick={() => setImagemView(imagemView === 'report' ? 'form' : 'report')}
+              className={`px-6 py-3 rounded-lg flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-white ${
+                imagemView === 'report'
+                  ? 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800'
+                  : 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800'
+              }`}
+            >
+              <BarChart3 size={20} />
+              {imagemView === 'report' ? 'Voltar aos Lançamentos' : 'Relatório'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ABAS */}
@@ -592,17 +635,17 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         return (
           <div className="flex gap-2 border-b border-gray-200">
             {show.includes('convenios') && (
-              <button onClick={() => setTab('convenios')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'convenios' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => { setTab('convenios'); setImagemView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'convenios' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                 <Building size={18} className="inline mr-2" />Convênios
               </button>
             )}
             {show.includes('particular') && (
-              <button onClick={() => setTab('particular')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'particular' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => { setTab('particular'); setImagemView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'particular' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                 <User size={18} className="inline mr-2" />Particular
               </button>
             )}
             {show.includes('repasse-imagem') && (
-              <button onClick={() => setTab('repasse-imagem')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'repasse-imagem' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => setTab('repasse-imagem')} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'repasse-imagem' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                 <Building size={18} className="inline mr-2" />Repasse imagem
               </button>
             )}
@@ -1404,24 +1447,38 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       )}
 
       {/* === ABA REPASSE IMAGEM === */}
-      {tab === 'repasse-imagem' && (
+      {tab === 'repasse-imagem' && imagemView === 'form' && (
         <div className="space-y-6">
+          {/* Filtros e configuração */}
           <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
-            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
-              <div className="flex-1">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Clínica</label>
                 <select
                   value={imagemClinica}
                   onChange={(e) => setImagemClinica(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
-                  <option value="">Selecione a clínica</option>
+                  <option value="">Todas as clínicas</option>
                   {hospitais.map((hospital) => (
                     <option key={hospital.id} value={hospital.id}>{hospital.nome}</option>
                   ))}
                 </select>
               </div>
-              <div className="w-full lg:w-48">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
+                <select
+                  value={imagemMedicoFiltro}
+                  onChange={(e) => setImagemMedicoFiltro(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="">Todos os médicos</option>
+                  {medicos.map((medico) => (
+                    <option key={medico.id} value={medico.id}>{medico.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Imposto (%)</label>
                 <input
                   type="number"
@@ -1430,16 +1487,61 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                   step="0.01"
                   value={imagemImposto}
                   onChange={(e) => setImagemImposto(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
-              <div className="bg-blue-50 rounded-lg px-5 py-3 min-w-[220px]">
-                <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total da clínica</p>
-                <p className="text-2xl font-bold text-blue-800">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0), 0))}</p>
+              <div className="bg-indigo-50 rounded-lg px-5 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">Total filtrado</p>
+                <p className="text-xl font-bold text-indigo-800">{money(kpisImagem.totalRecebido)}</p>
               </div>
             </div>
           </div>
 
+          {/* KPIs de imagem */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-indigo-100 text-sm font-medium">Total Recebido</p>
+                  <p className="text-2xl font-bold">{money(kpisImagem.totalRecebido)}</p>
+                  <p className="text-indigo-200 text-xs mt-1">{formatSelectedMonth(selectedMonth)}</p>
+                </div>
+                <div className="bg-white/20 p-3 rounded-lg"><DollarSign className="h-6 w-6" /></div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-red-100 text-sm font-medium">Imposto</p>
+                  <p className="text-2xl font-bold">{money(kpisImagem.totalImposto)}</p>
+                  <p className="text-red-200 text-xs mt-1">Sobre o total recebido</p>
+                </div>
+                <div className="bg-white/20 p-3 rounded-lg"><FileText className="h-6 w-6" /></div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-100 text-sm font-medium">Ficou na Casa (50%)</p>
+                  <p className="text-2xl font-bold">{money(kpisImagem.ficouNaCasa)}</p>
+                  <p className="text-blue-200 text-xs mt-1">Após imposto</p>
+                </div>
+                <div className="bg-white/20 p-3 rounded-lg"><Building className="h-6 w-6" /></div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-emerald-100 text-sm font-medium">Para Médicos (50%)</p>
+                  <p className="text-2xl font-bold">{money(kpisImagem.foiParaMedicos)}</p>
+                  <p className="text-emerald-200 text-xs mt-1">Após imposto</p>
+                </div>
+                <div className="bg-white/20 p-3 rounded-lg"><TrendingUp className="h-6 w-6" /></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Formulário de lançamento */}
           <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -1456,7 +1558,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                 <select
                   value={imagemMedico}
                   onChange={(e) => setImagemMedico(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   required
                 >
                   <option value="">Selecione o médico</option>
@@ -1473,7 +1575,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                   step="0.01"
                   value={imagemTotal}
                   onChange={(e) => setImagemTotal(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   placeholder="0,00"
                   required
                 />
@@ -1481,13 +1583,14 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               <button
                 type="submit"
                 disabled={repasseImagemLoading || !imagemClinica}
-                className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50"
+                className="px-5 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-50"
               >
                 {editingRepasseImagem ? 'Salvar alteração' : 'Adicionar linha'}
               </button>
             </form>
           </div>
 
+          {/* Tabela de lançamentos */}
           <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px]">
@@ -1505,10 +1608,10 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                 <tbody className="divide-y divide-gray-100">
                   {repasseImagemLoading ? (
                     <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Carregando lançamentos...</td></tr>
-                  ) : !imagemClinica ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Selecione uma clínica para visualizar os lançamentos.</td></tr>
+                  ) : !imagemClinica && !imagemMedicoFiltro ? (
+                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Selecione uma clínica ou um médico para visualizar os lançamentos.</td></tr>
                   ) : imagemRowsFiltradas.length === 0 ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Nenhum lançamento para esta clínica em {formatSelectedMonth(selectedMonth)}.</td></tr>
+                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Nenhum lançamento para os filtros selecionados em {formatSelectedMonth(selectedMonth)}.</td></tr>
                   ) : (
                     imagemRowsFiltradas.map((item) => {
                       const total = Number(item.total || 0);
@@ -1516,7 +1619,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                       const semImposto = total - imposto;
                       const metade = semImposto / 2;
                       return (
-                        <tr key={item.id} className="hover:bg-blue-50 transition-colors">
+                        <tr key={item.id} className="hover:bg-indigo-50 transition-colors">
                           <td colSpan={2} className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
                           <td colSpan={2} className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(total)}</td>
                           <td colSpan={2} className="px-4 py-3 text-sm text-right text-red-600">{money(imposto)}</td>
@@ -1525,7 +1628,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                           <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700">{money(metade)}</td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
-                              <button onClick={() => openRepasseImagemEdit(item)} className="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded text-xs">Editar</button>
+                              <button onClick={() => openRepasseImagemEdit(item)} className="px-2 py-1 text-indigo-600 hover:bg-indigo-50 rounded text-xs">Editar</button>
                               <button onClick={() => deleteRepasseImagem(item.id)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs">Excluir</button>
                             </div>
                           </td>
@@ -1538,11 +1641,11 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                   <tfoot className="bg-gray-50 border-t border-gray-200">
                     <tr>
                       <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-700">Total</td>
-                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0), 0))}</td>
-                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(imagemRowsFiltradas.reduce((sum, item) => sum + (Number(item.total || 0) * Number(item.imposto_percentual || 0) / 100), 0))}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100), 0))}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100) / 2, 0))}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(imagemRowsFiltradas.reduce((sum, item) => sum + Number(item.total || 0) * (1 - Number(item.imposto_percentual || 0) / 100) / 2, 0))}</td>
+                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(kpisImagem.totalRecebido)}</td>
+                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(kpisImagem.totalImposto)}</td>
+                      <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(kpisImagem.semImposto)}</td>
+                      <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(kpisImagem.ficouNaCasa)}</td>
+                      <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(kpisImagem.foiParaMedicos)}</td>
                       <td></td>
                     </tr>
                   </tfoot>
@@ -1551,6 +1654,18 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
             </div>
           </div>
         </div>
+      )}
+
+      {/* === ABA REPASSE IMAGEM: RELATÓRIO === */}
+      {tab === 'repasse-imagem' && imagemView === 'report' && (
+        <RepasseImagemReport
+          repasses={repassesImagem}
+          medicos={medicos}
+          hospitais={hospitais}
+          selectedMonth={selectedMonth}
+          formatSelectedMonth={formatSelectedMonth}
+          money={money}
+        />
       )}
 
       <EditProducaoModal
@@ -1568,6 +1683,256 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         message="Tem certeza que deseja excluir este registro de produção? Esta ação não pode ser desfeita."
         loading={deleteLoading}
       />
+    </div>
+  );
+};
+
+/* ============================================================
+ * Relatório de Repasse Imagem
+ * KPIs: total recebido, imposto, ficou na casa, foi para médicos
+ * Filtro por médico e por clínica
+ * Tabela detalhada + totais
+ * ============================================================ */
+interface RepasseImagemReportProps {
+  repasses: RepasseImagem[];
+  medicos: Medico[];
+  hospitais: Hospital[];
+  selectedMonth: string;
+  formatSelectedMonth: (month: string) => string;
+  money: (value: number) => string;
+}
+
+const RepasseImagemReport: React.FC<RepasseImagemReportProps> = ({
+  repasses,
+  medicos,
+  hospitais,
+  selectedMonth,
+  formatSelectedMonth,
+  money,
+}) => {
+  const [filtroMedico, setFiltroMedico] = useState('');
+  const [filtroClinica, setFiltroClinica] = useState('');
+
+  const rows = repasses.filter((item) => {
+    const matchMedico = !filtroMedico || String(item.medico_id) === filtroMedico;
+    const matchClinica = !filtroClinica || String(item.hospital_id) === filtroClinica;
+    return matchMedico && matchClinica;
+  });
+
+  const totalRecebido = rows.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const totalImposto = rows.reduce(
+    (sum, item) => sum + (Number(item.total || 0) * Number(item.imposto_percentual || 0)) / 100,
+    0
+  );
+  const semImposto = totalRecebido - totalImposto;
+  const ficouNaCasa = semImposto / 2;
+  const foiParaMedicos = semImposto / 2;
+
+  // Agrupamento por médico (subtotais)
+  const grupos = medicos
+    .map((medico) => {
+      const linhas = rows.filter((r) => r.medico_id === medico.id);
+      if (linhas.length === 0) return null;
+      const total = linhas.reduce((s, r) => s + Number(r.total || 0), 0);
+      const imposto = linhas.reduce((s, r) => s + (Number(r.total || 0) * Number(r.imposto_percentual || 0)) / 100, 0);
+      const sem = total - imposto;
+      return {
+        medico,
+        linhas,
+        total,
+        imposto,
+        semImposto: sem,
+        casa: sem / 2,
+        repasse: sem / 2,
+      };
+    })
+    .filter(Boolean) as Array<{
+      medico: Medico;
+      linhas: RepasseImagem[];
+      total: number;
+      imposto: number;
+      semImposto: number;
+      casa: number;
+      repasse: number;
+    }>;
+
+  const hospitalNome = (id: number) => hospitais.find((h) => h.id === id)?.nome || '-';
+
+  return (
+    <div className="space-y-6">
+      {/* Filtros */}
+      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="bg-indigo-100 p-2 rounded-lg">
+            <Filter className="h-5 w-5 text-indigo-600" />
+          </div>
+          <span className="font-semibold text-gray-800">Filtros do relatório</span>
+          <span className="text-sm text-gray-500 ml-auto">{formatSelectedMonth(selectedMonth)}</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
+            <select
+              value={filtroMedico}
+              onChange={(e) => setFiltroMedico(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="">Todos os médicos</option>
+              {medicos.map((m) => (
+                <option key={m.id} value={m.id}>{m.nome}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Clínica</label>
+            <select
+              value={filtroClinica}
+              onChange={(e) => setFiltroClinica(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="">Todas as clínicas</option>
+              {hospitais.map((h) => (
+                <option key={h.id} value={h.id}>{h.nome}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {(filtroMedico || filtroClinica) && (
+          <button
+            onClick={() => { setFiltroMedico(''); setFiltroClinica(''); }}
+            className="mt-4 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-indigo-100 text-sm font-medium">Total Recebido</p>
+              <p className="text-2xl font-bold">{money(totalRecebido)}</p>
+              <p className="text-indigo-200 text-xs mt-1">{rows.length} lançamento{rows.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg"><DollarSign className="h-6 w-6" /></div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-100 text-sm font-medium">Imposto</p>
+              <p className="text-2xl font-bold">{money(totalImposto)}</p>
+              <p className="text-red-200 text-xs mt-1">Sobre o total recebido</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg"><FileText className="h-6 w-6" /></div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium">Ficou na Casa (50%)</p>
+              <p className="text-2xl font-bold">{money(ficouNaCasa)}</p>
+              <p className="text-blue-200 text-xs mt-1">Após imposto</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg"><Building className="h-6 w-6" /></div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-emerald-100 text-sm font-medium">Para Médicos (50%)</p>
+              <p className="text-2xl font-bold">{money(foiParaMedicos)}</p>
+              <p className="text-emerald-200 text-xs mt-1">Após imposto</p>
+            </div>
+            <div className="bg-white/20 p-3 rounded-lg"><Users className="h-6 w-6" /></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Detalhamento */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Detalhamento por médico</h3>
+          <p className="text-sm text-gray-500">
+            Totais consolidados de {formatSelectedMonth(selectedMonth)}
+            {filtroMedico && ` — ${medicos.find((m) => String(m.id) === filtroMedico)?.nome}`}
+            {filtroClinica && ` — ${hospitalNome(Number(filtroClinica))}`}
+          </p>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="px-6 py-12 text-center text-gray-500">
+            <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+            <p className="text-lg font-medium">Nenhum lançamento para os filtros selecionados</p>
+            <p className="text-sm">Ajuste os filtros ou selecione outro mês.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px]">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Médico</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Clínica</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Imposto (%)</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Valor Imposto</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">S/ Imposto</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Casa 50%</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Médico 50%</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {grupos.map((grupo) => (
+                  <React.Fragment key={grupo.medico.id}>
+                    <tr className="bg-indigo-50/60">
+                      <td colSpan={2} className="px-4 py-2 text-sm font-bold text-indigo-800">
+                        {grupo.medico.nome}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-gray-900">{money(grupo.total)}</td>
+                      <td className="px-4 py-2"></td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-red-600">{money(grupo.imposto)}</td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-gray-900">{money(grupo.semImposto)}</td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-blue-700">{money(grupo.casa)}</td>
+                      <td className="px-4 py-2 text-sm text-right font-bold text-emerald-700">{money(grupo.repasse)}</td>
+                    </tr>
+                    {grupo.linhas.map((linha) => {
+                      const total = Number(linha.total || 0);
+                      const pct = Number(linha.imposto_percentual || 0);
+                      const imposto = (total * pct) / 100;
+                      const sem = total - imposto;
+                      return (
+                        <tr key={linha.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 text-sm text-gray-700">{linha.medico?.nome || grupo.medico.nome}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{hospitalNome(linha.hospital_id)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-900">{money(total)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-700">{pct.toFixed(2).replace('.', ',')} %</td>
+                          <td className="px-4 py-3 text-sm text-right text-red-600">{money(imposto)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-900">{money(sem)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-blue-700">{money(sem / 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-emerald-700">{money(sem / 2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-900">TOTAL GERAL</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(totalRecebido)}</td>
+                  <td className="px-4 py-3"></td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(totalImposto)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(semImposto)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(ficouNaCasa)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(foiParaMedicos)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
