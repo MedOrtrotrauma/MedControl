@@ -118,4 +118,22 @@ export interface Repasse {
   desconto_fixo_clinica?: number;
   cirurgia_id?: number | null;
   cirurgia?: Cirurgia;
+  is_split_payment?: boolean;
+  cash_amount?: number;
+  other_payment_method?: string;
+  payment_tax_rate?: number;
+  payment_tax_amount?: number;
+  invoice_tax_rate?: number;
+  invoice_tax_amount?: number;
+  medication_cost?: number;
+  supplies_cost?: number;
+  other_costs?: number;
+  other_costs_description?: string;
+  total_deductions?: number;
+  net_clinic_value?: number;
+  cash_settlement_type?: string;
+  installments?: number;
+  has_medication?: boolean;
+  has_other_costs?: boolean;
+  repasse_particular?: boolean;
 }

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { RepasseComponent } from './components/Repasse';
 import { ProducaoMensalComponent } from './components/ProducaoMensal';
+import { RepasseParticularComponent } from './components/RepasseParticular';
 import { ImagemComponent } from './components/Imagem';
 import { RelatoriosComponent } from './components/Relatorios';
 import { DashboardComponent } from './components/Dashboard';
@@ -126,7 +127,7 @@ function AppContent() {
     switch (currentPage) {
       case 'dashboard': return <DashboardComponent />;
       case 'repasse_socios': return <RepasseComponent tipo="socio" />;
-      case 'repasse_particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
+      case 'repasse_particulares': return <RepasseParticularComponent />;
       case 'imagem': return <ImagemComponent />;
       case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'relatorios': return <RelatoriosComponent />;
