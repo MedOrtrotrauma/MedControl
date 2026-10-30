@@ -120,7 +120,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setParticularLoading(true);
     try {
       const res = await dbHelpers.getRepassesParticularByMonth(selectedMonth);
-      if (res.data) setParticulares((res.data as Repasse[]).filter((r) => !r.repasse_particular));
+      if (res.data) setParticulares((res.data as Repasse[]).filter((r) => r.repasse_particular === true));
     } catch (error) {
       console.error('Erro ao carregar particulares:', error);
     }
@@ -185,6 +185,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       data_cirurgia: particularForm.data_cirurgia,
       tipo: 'consulta' as const,
       is_particular: true,
+      repasse_particular: true,
       tipo_procedimento_detalhado: 'cirurgia_particular' as const,
       tipo_procedimento: particularForm.tipo_procedimento.trim() || null,
       forma_pagamento: particularForm.forma_pagamento,
