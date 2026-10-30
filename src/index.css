@@ -294,6 +294,10 @@ h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
 .form-grid label input, .form-grid label select, .form-grid label textarea { display: block; margin-top: 8px; font-weight: 400; text-transform: none; }
 .form-grid textarea { height: auto; padding: 12px 14px; resize: vertical; }
 .form-grid .wide { grid-column: 1 / -1; }
+.checkbox-group { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; background: #faf8fc; }
+.checkbox-group legend { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 6px; }
+.checkbox-label { display: inline-flex !important; align-items: center; gap: 8px; font-size: 13px !important; font-weight: 500 !important; text-transform: none !important; letter-spacing: normal !important; color: var(--ink) !important; cursor: pointer; }
+.checkbox-label input { width: 18px; height: 18px; accent-color: var(--lilac); cursor: pointer; margin: 0 !important; }
 .calculation-card {
   display: flex; align-items: center; justify-content: space-between; gap: 15px;
   padding: 18px 20px; border: 1px solid #d8c8e8; border-radius: 12px; background: var(--lilac-soft);

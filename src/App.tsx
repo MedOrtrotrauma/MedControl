@@ -13,7 +13,6 @@ import {
   Stethoscope,
   UserRound,
   UsersRound,
-  Users,
   X,
   ShieldCheck,
 } from 'lucide-react';
@@ -30,7 +29,7 @@ import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
 import type { TipoUsuario } from './components/Auth/AuthContext';
 
-type Page = 'repasse_terceiros' | 'repasse_socios' | 'imagem' | 'particulares' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'usuarios';
+type Page = 'repasse_socios' | 'imagem' | 'particulares' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'usuarios';
 
 interface MenuItem { id: Page; label: string; icon: typeof BarChart3; }
 interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; roles: TipoUsuario[]; }
@@ -39,7 +38,6 @@ const menuGroups: MenuGroup[] = [
   {
     label: 'Repasse médico', icon: CircleDollarSign, roles: ['administrativo', 'medico'],
     items: [
-      { id: 'repasse_terceiros', label: 'Repasse a terceiros', icon: Users },
       { id: 'repasse_socios', label: 'Repasse a sócios', icon: CircleDollarSign },
     ],
   },
@@ -69,7 +67,6 @@ const menuGroups: MenuGroup[] = [
 ];
 
 const pageTitles: Record<Page, string> = {
-  repasse_terceiros: 'Repasse a terceiros',
   repasse_socios: 'Repasse a sócios',
   relatorios: 'Relatório de repasses',
   medicos: 'Médicos',
@@ -84,7 +81,7 @@ const pageTitles: Record<Page, string> = {
 
 function AppContent() {
   const { user, perfil, loading, signOut } = useAuth();
-  const [page, setPage] = useState<Page>('repasse_terceiros');
+  const [page, setPage] = useState<Page>('repasse_socios');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasse médico', 'Imagem', 'Particulares']));
@@ -101,7 +98,7 @@ function AppContent() {
 
   const tipo = perfil.tipo;
   const visibleGroups = menuGroups.filter((g) => g.roles.includes(tipo));
-  const defaultPage = tipo === 'medico' ? 'repasse_terceiros' : 'repasse_terceiros';
+  const defaultPage = 'repasse_socios';
 
   const toggleGroup = (label: string) => {
     setOpenGroups((prev) => {
@@ -115,7 +112,6 @@ function AppContent() {
 
   const renderPage = () => {
     switch (page) {
-      case 'repasse_terceiros': return <RepasseComponent tipo="terceiro" />;
       case 'repasse_socios': return <RepasseComponent tipo="socio" />;
       case 'imagem': return <ProducaoMensalComponent initialTab="repasse-imagem" visibleTabs={['repasse-imagem']} />;
       case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
@@ -126,7 +122,7 @@ function AppContent() {
       case 'unidades': return <UnidadesCadastro />;
       case 'procedimentos': return <ProcedimentosCadastro />;
       case 'usuarios': return <UsuariosCadastro />;
-      default: return <RepasseComponent tipo="terceiro" />;
+      default: return <RepasseComponent tipo="socio" />;
     }
   };
 

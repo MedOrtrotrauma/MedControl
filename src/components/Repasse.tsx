@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from './Auth/AuthContext';
-import type { DestinatarioTipo, Hospital, Medico, Repasse, StatusPagamento } from '../types';
+import type { DestinatarioTipo, Hospital, Medico, Procedimento, Repasse, StatusPagamento } from '../types';
 
 const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 const dateLabel = (value: string) => value ? value.split('T')[0].split('-').reverse().join('/') : '-';
@@ -33,11 +33,12 @@ const months = () => Array.from({ length: 13 }, (_, index) => {
 const numberValue = (value: string) => Math.max(0, Number(value.replace(',', '.')) || 0);
 
 const createForm = (month: string) => ({
-  numero_atendimento: '', medico_id: '', hospital_id: '', nome_paciente: '', data_cirurgia: '', tipo: 'consulta' as 'consulta' | 'cirurgia',
+  numero_atendimento: '', medico_id: '', hospital_id: '', nome_paciente: '', data_cirurgia: '', tipo: 'cirurgia' as 'consulta' | 'cirurgia',
   valor: '', auxilio_1: '0', auxilio_2: '0', outras_deducoes: '0',
   desconto_paciente: '0', desconto_cartao: '0', valor_recebido: '', percentual_terceiro: '60',
-  tipo_procedimento: 'Consulta', quantidade: '1', forma_pagamento: 'convenio', valor_unitario: '', valor_glosa: '0',
+  tipo_procedimento: '', quantidade: '1', forma_pagamento: 'convenio', valor_unitario: '', valor_glosa: '0',
   imposto_percentual: '12', observacao: '', month_reference: month, status_pagamento: 'pendente' as StatusPagamento,
+  desc_adm: true, desc_chefe_faturamento: true, desc_faturista: true, desc_autorizacao: true,
 });
 type FormData = ReturnType<typeof createForm>;
 
@@ -52,6 +53,7 @@ export function RepasseComponent({ tipo }: Props) {
   const [items, setItems] = useState<Repasse[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [hospitais, setHospitais] = useState<Hospital[]>([]);
+  const [procedimentos, setProcedimentos] = useState<Procedimento[]>([]);
   const [form, setForm] = useState<FormData>(createForm(month));
   const [editing, setEditing] = useState<Repasse | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -64,21 +66,22 @@ export function RepasseComponent({ tipo }: Props) {
 
   const load = async () => {
     setLoading(true);
-    const [repasseResult, medicosResult, hospitaisResult] = await Promise.all([
-      dbHelpers.getRepassesByMonthAndTipo(month, tipo), dbHelpers.getMedicos(), dbHelpers.getHospitais(),
+    const [repasseResult, medicosResult, hospitaisResult, procedimentosResult] = await Promise.all([
+      dbHelpers.getRepassesByMonthAndTipo(month, tipo), dbHelpers.getMedicos(), dbHelpers.getHospitais(), dbHelpers.getProcedimentos(),
     ]);
-    if (repasseResult.error || medicosResult.error || hospitaisResult.error) setError('Não foi possível carregar os lançamentos.');
+    if (repasseResult.error || medicosResult.error || hospitaisResult.error || procedimentosResult.error) setError('Não foi possível carregar os lançamentos.');
     else {
       setItems((repasseResult.data as Repasse[]) || []);
       setMedicos((medicosResult.data as Medico[]) || []);
       setHospitais((hospitaisResult.data as Hospital[]) || []);
+      setProcedimentos((procedimentosResult.data as Procedimento[]) || []);
     }
     setLoading(false);
   };
 
   useEffect(() => { void load(); }, [month, tipo]);
 
-  const update = (field: keyof FormData, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const update = (field: keyof FormData, value: string | boolean) => setForm((current) => ({ ...current, [field]: value }));
   const openNew = () => { setEditing(null); setForm(createForm(month)); setShowForm(true); setError(''); };
   const openEdit = (item: Repasse) => {
     setEditing(item);
@@ -88,10 +91,11 @@ export function RepasseComponent({ tipo }: Props) {
       auxilio_2: String(item.auxilio_2 || 0), outras_deducoes: String(item.outras_deducoes || 0),
       desconto_paciente: String(item.desconto_paciente || 0), desconto_cartao: String(item.desconto_cartao || 0),
       valor_recebido: String(item.valor_recebido || item.valor || 0), percentual_terceiro: String(item.percentual_terceiro || 0),
-      tipo_procedimento: item.tipo_procedimento || 'Consulta', quantidade: String(item.quantidade || 1),
+      tipo_procedimento: item.tipo_procedimento || '', quantidade: String(item.quantidade || 1),
       forma_pagamento: item.forma_pagamento || 'convenio', valor_unitario: String(item.valor_unitario || item.valor || 0), valor_glosa: String(item.valor_glosa || 0),
       imposto_percentual: String(item.imposto_percentual ?? 12), observacao: item.observacao || '',
       month_reference: item.month_reference || month, status_pagamento: item.status_pagamento || 'pendente',
+      desc_adm: (item as any).desc_adm ?? true, desc_chefe_faturamento: (item as any).desc_chefe_faturamento ?? true, desc_faturista: (item as any).desc_faturista ?? true, desc_autorizacao: (item as any).desc_autorizacao ?? true,
     });
     setShowForm(true);
   };
@@ -102,13 +106,18 @@ export function RepasseComponent({ tipo }: Props) {
       const total = bruto + numberValue(form.auxilio_1) + numberValue(form.auxilio_2);
       const taxa = total * 0.015;
       const imposto = total * numberValue(form.imposto_percentual) / 100;
-      const liquido = Math.max(0, total - taxa - imposto - numberValue(form.outras_deducoes));
-      return { total, taxa, imposto, global: 0, recebido: 0, repasse: liquido, saldo: 0 };
+      const descAdm = form.desc_adm ? total * 0.01 : 0;
+      const descChefe = form.desc_chefe_faturamento ? total * 0.0075 : 0;
+      const descFaturista = form.desc_faturista ? total * 0.005 : 0;
+      const descAutorizacao = form.desc_autorizacao ? total * 0.0025 : 0;
+      const descontos = descAdm + descChefe + descFaturista + descAutorizacao;
+      const liquido = Math.max(0, total - taxa - imposto - descontos - numberValue(form.outras_deducoes));
+      return { total, taxa, imposto, global: 0, recebido: 0, repasse: liquido, saldo: 0, descontos };
     }
     const global = Math.max(0, bruto - numberValue(form.desconto_paciente) - numberValue(form.desconto_cartao) - numberValue(form.valor_glosa));
     const recebido = form.valor_recebido === '' ? global : numberValue(form.valor_recebido);
     const repasse = recebido * numberValue(form.percentual_terceiro) / 100;
-    return { total: bruto, taxa: 0, imposto: 0, global, recebido, repasse, saldo: Math.max(0, recebido - repasse) };
+    return { total: bruto, taxa: 0, imposto: 0, global, recebido, repasse, saldo: Math.max(0, recebido - repasse), descontos: 0 };
   }, [form, tipo]);
 
   const save = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -116,11 +125,13 @@ export function RepasseComponent({ tipo }: Props) {
     setSaving(true); setError('');
     const payload = tipo === 'socio' ? {
       numero_atendimento: form.numero_atendimento.trim(), medico_id: Number(form.medico_id), hospital_id: Number(form.hospital_id), nome_paciente: form.nome_paciente.trim(), data_cirurgia: form.data_cirurgia,
-      valor: numberValue(form.valor), tipo: form.tipo, is_particular: true, tipo_procedimento_detalhado: 'cirurgia_particular',
+      valor: numberValue(form.valor), tipo: 'cirurgia', is_particular: true, tipo_procedimento_detalhado: 'cirurgia_particular',
       valor_repasse_medico: calculations.repasse, month_reference: form.month_reference, observacao: form.observacao.trim() || null,
       destinatario_tipo: tipo, auxilio_1: numberValue(form.auxilio_1), auxilio_2: numberValue(form.auxilio_2), taxa_1_5: calculations.taxa,
       imposto_percentual: numberValue(form.imposto_percentual), outras_deducoes: numberValue(form.outras_deducoes), valor_liquido: calculations.repasse,
       valor_glosa: 0, valor_recebido: 0, percentual_terceiro: 0, valor_terceiro: 0, saldo_controle: 0, status_pagamento: form.status_pagamento,
+      desc_adm: form.desc_adm, desc_chefe_faturamento: form.desc_chefe_faturamento, desc_faturista: form.desc_faturista, desc_autorizacao: form.desc_autorizacao,
+      tipo_procedimento: form.tipo_procedimento, quantidade: numberValue(form.quantidade), forma_pagamento: form.forma_pagamento,
       data_pagamento: form.status_pagamento === 'pago' ? new Date().toISOString().slice(0, 10) : null,
     } : {
       numero_atendimento: form.numero_atendimento.trim(), medico_id: Number(form.medico_id), hospital_id: Number(form.hospital_id), nome_paciente: form.nome_paciente.trim(), data_cirurgia: form.data_cirurgia,
@@ -156,7 +167,7 @@ export function RepasseComponent({ tipo }: Props) {
   const deductions = Math.max(0, gross - totals - (tipo === 'terceiro' ? filtered.reduce((sum, item) => sum + Number(item.saldo_controle || 0), 0) : 0));
 
   const title = tipo === 'socio' ? 'Repasse para sócios' : 'Repasse a terceiros';
-  const socCols = ['Nº', 'Médico', 'Data', 'Paciente', 'Procedimento', 'Forma pagto', 'Qtde', 'Valor total', 'Desc. paciente', 'Desc. cartão', 'Glosa', 'Global', 'Recebido', '1,5%', 'Imposto %', 'Imposto R$', 'Outras ded.', 'Repasse', 'Status', 'Ações'];
+  const socCols = ['Nº', 'Médico', 'Data', 'Paciente', 'Procedimento', 'Forma pagto', 'Qtde', 'Valor total', '1,5%', 'Imposto %', 'Imposto R$', 'Descontos', 'Outras ded.', 'Repasse', 'Status', 'Ações'];
   const tercCols = ['Nº', 'Médico', 'Data', 'Paciente', 'Procedimento', 'Forma pagto', 'Qtde', 'Valor total', 'Desc. paciente', 'Desc. cartão', 'Glosa', 'Global', 'Recebido', 'Repasse %', 'Repasse R$', 'Saldo', 'Status', 'Ações'];
 
   return <div className="space-y-6">
@@ -165,19 +176,23 @@ export function RepasseComponent({ tipo }: Props) {
     <section className="filter-panel"><div className="filter-heading"><Filter size={17} /><strong>Filtrar lançamentos</strong></div><div className="filter-grid"><label className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar médico ou paciente" /></label><select value={medico} onChange={(event) => setMedico(event.target.value)}><option value="">Todos os médicos</option>{medicos.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select><select value={status} onChange={(event) => setStatus(event.target.value as 'todos' | StatusPagamento)}><option value="todos">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select></div></section>
     {error && <div className="alert-error">{error}</div>}
     {showForm && !isReadOnly && <div className="modal-overlay" onClick={() => setShowForm(false)}><div className="modal-content" onClick={(e) => e.stopPropagation()}><div className="modal-header"><div><span className="eyebrow">{editing ? 'Editar lançamento' : 'Novo lançamento'}</span><h2>{title}</h2></div><button className="icon-button" onClick={() => setShowForm(false)}><X size={18} /></button></div><form className="form-grid" onSubmit={save}>
-      <label>Mês de referência<select required value={form.month_reference} onChange={(event) => update('month_reference', event.target.value)}>{months().map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Médico<select required value={form.medico_id} onChange={(event) => update('medico_id', event.target.value)}><option value="">Selecione</option>{medicos.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Hospital / clínica<select required value={form.hospital_id} onChange={(event) => update('hospital_id', event.target.value)}><option value="">Selecione</option>{hospitais.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Paciente<input required value={form.nome_paciente} onChange={(event) => update('nome_paciente', event.target.value)} /></label><label>Data do atendimento<input required type="date" value={form.data_cirurgia} onChange={(event) => update('data_cirurgia', event.target.value)} /></label><label>Tipo<select value={form.tipo} onChange={(event) => update('tipo', event.target.value)}><option value="consulta">Consulta</option><option value="cirurgia">Cirurgia</option></select></label>
-      <label>Nº atendimento<input value={form.numero_atendimento} onChange={(event) => update('numero_atendimento', event.target.value)} placeholder="Opcional" /></label><label>Procedimento<input value={form.tipo_procedimento} onChange={(event) => update('tipo_procedimento', event.target.value)} placeholder="Consulta, infiltração..." /></label><label>Forma de pagamento<select value={form.forma_pagamento} onChange={(event) => update('forma_pagamento', event.target.value)}><option value="convenio">Convênio</option><option value="pix">Pix</option><option value="credito">Crédito</option><option value="debito">Débito</option><option value="especie">Espécie</option></select></label><label>Quantidade<input min="1" type="number" value={form.quantidade} onChange={(event) => update('quantidade', event.target.value)} /></label><label>Valor total<input required min="0" step="0.01" type="number" value={form.valor} onChange={(event) => update('valor', event.target.value)} /></label><label>Desc. paciente<input min="0" step="0.01" type="number" value={form.desconto_paciente} onChange={(event) => update('desconto_paciente', event.target.value)} /></label><label>Desc. cartão<input min="0" step="0.01" type="number" value={form.desconto_cartao} onChange={(event) => update('desconto_cartao', event.target.value)} /></label><label>Glosa<input min="0" step="0.01" type="number" value={form.valor_glosa} onChange={(event) => update('valor_glosa', event.target.value)} /></label>
-      {tipo === 'socio' ? <><label>1º auxílio<input min="0" step="0.01" type="number" value={form.auxilio_1} onChange={(event) => update('auxilio_1', event.target.value)} /></label><label>2º auxílio<input min="0" step="0.01" type="number" value={form.auxilio_2} onChange={(event) => update('auxilio_2', event.target.value)} /></label><label>Imposto (%)<input min="0" step="0.01" type="number" value={form.imposto_percentual} onChange={(event) => update('imposto_percentual', event.target.value)} /></label><label>Outras deduções<input min="0" step="0.01" type="number" value={form.outras_deducoes} onChange={(event) => update('outras_deducoes', event.target.value)} /></label></> : <><label>Valor recebido<input min="0" step="0.01" type="number" value={form.valor_recebido} placeholder="Calculado pelo global" onChange={(event) => update('valor_recebido', event.target.value)} /></label><label>Repasse (%)<input required min="0" max="100" step="0.01" type="number" value={form.percentual_terceiro} onChange={(event) => update('percentual_terceiro', event.target.value)} /></label></>}
-      <label>Status<select value={form.status_pagamento} onChange={(event) => update('status_pagamento', event.target.value)}><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select></label><label className="wide">Observação<textarea rows={3} value={form.observacao} onChange={(event) => update('observacao', event.target.value)} placeholder="Referência ou observação do relatório" /></label><div className="calculation-card wide"><div><span>{tipo === 'socio' ? 'Valor de repasse calculado' : 'Repasse profissional calculado'}</span><strong>{money(calculations.repasse)}</strong></div><small>{tipo === 'socio' ? `Total ${money(calculations.total)} - taxa 1,5% ${money(calculations.taxa)} - imposto ${money(calculations.imposto)}` : `Global ${money(calculations.global)} - recebido ${money(calculations.recebido)} - saldo ${money(calculations.saldo)}`}</small></div><div className="form-actions wide"><button type="button" className="button button-muted" onClick={() => setShowForm(false)}>Cancelar</button><button className="button button-primary" disabled={saving}>{saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Salvar lançamento'}</button></div>
+      <label>Mês de referência<select required value={form.month_reference} onChange={(event) => update('month_reference', event.target.value)}>{months().map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Médico<select required value={form.medico_id} onChange={(event) => update('medico_id', event.target.value)}><option value="">Selecione</option>{medicos.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Hospital / clínica<select required value={form.hospital_id} onChange={(event) => update('hospital_id', event.target.value)}><option value="">Selecione</option>{hospitais.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Paciente<input required value={form.nome_paciente} onChange={(event) => update('nome_paciente', event.target.value)} /></label><label>Data do atendimento<input required type="date" value={form.data_cirurgia} onChange={(event) => update('data_cirurgia', event.target.value)} /></label><label>Tipo<select value={form.tipo} onChange={(event) => update('tipo', event.target.value)}><option value="cirurgia">Cirurgia</option></select></label>
+      <label>Nº atendimento<input value={form.numero_atendimento} onChange={(event) => update('numero_atendimento', event.target.value)} placeholder="Opcional" /></label><label>Procedimento<select value={form.tipo_procedimento} onChange={(event) => update('tipo_procedimento', event.target.value)}><option value="">Selecione</option>{procedimentos.map((item) => <option key={item.id} value={item.nome}>{item.nome}</option>)}</select></label><label>Forma de pagamento<select value={form.forma_pagamento} onChange={(event) => update('forma_pagamento', event.target.value)}><option value="convenio">Convênio</option><option value="pix">Pix</option><option value="credito">Crédito</option><option value="debito">Débito</option><option value="especie">Espécie</option></select></label><label>Quantidade<input min="1" type="number" value={form.quantidade} onChange={(event) => update('quantidade', event.target.value)} /></label><label>Valor total<input required min="0" step="0.01" type="number" value={form.valor} onChange={(event) => update('valor', event.target.value)} /></label>{tipo === 'terceiro' && <><label>Desc. paciente<input min="0" step="0.01" type="number" value={form.desconto_paciente} onChange={(event) => update('desconto_paciente', event.target.value)} /></label><label>Desc. cartão<input min="0" step="0.01" type="number" value={form.desconto_cartao} onChange={(event) => update('desconto_cartao', event.target.value)} /></label><label>Glosa<input min="0" step="0.01" type="number" value={form.valor_glosa} onChange={(event) => update('valor_glosa', event.target.value)} /></label></>}
+      {tipo === 'socio' ? <><label>1º auxílio<input min="0" step="0.01" type="number" value={form.auxilio_1} onChange={(event) => update('auxilio_1', event.target.value)} /></label><label>2º auxílio<input min="0" step="0.01" type="number" value={form.auxilio_2} onChange={(event) => update('auxilio_2', event.target.value)} /></label><label>Imposto (%)<input min="0" step="0.01" type="number" value={form.imposto_percentual} onChange={(event) => update('imposto_percentual', event.target.value)} /></label><label>Outras deduções<input min="0" step="0.01" type="number" value={form.outras_deducoes} onChange={(event) => update('outras_deducoes', event.target.value)} /></label><fieldset className="checkbox-group wide"><legend>Aplicar descontos</legend><label className="checkbox-label"><input type="checkbox" checked={form.desc_adm} onChange={(event) => update('desc_adm', event.target.checked)} /> Adm (1%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_chefe_faturamento} onChange={(event) => update('desc_chefe_faturamento', event.target.checked)} /> Chefe faturamento (0,75%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_faturista} onChange={(event) => update('desc_faturista', event.target.checked)} /> Faturista (0,5%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_autorizacao} onChange={(event) => update('desc_autorizacao', event.target.checked)} /> Autorização (0,25%)</label></fieldset></> : <><label>Valor recebido<input min="0" step="0.01" type="number" value={form.valor_recebido} placeholder="Calculado pelo global" onChange={(event) => update('valor_recebido', event.target.value)} /></label><label>Repasse (%)<input required min="0" max="100" step="0.01" type="number" value={form.percentual_terceiro} onChange={(event) => update('percentual_terceiro', event.target.value)} /></label></>}
+      <label>Status<select value={form.status_pagamento} onChange={(event) => update('status_pagamento', event.target.value)}><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select></label><label className="wide">Observação<textarea rows={3} value={form.observacao} onChange={(event) => update('observacao', event.target.value)} placeholder="Referência ou observação do relatório" /></label><div className="calculation-card wide"><div><span>{tipo === 'socio' ? 'Valor de repasse calculado' : 'Repasse profissional calculado'}</span><strong>{money(calculations.repasse)}</strong></div><small>{tipo === 'socio' ? `Total ${money(calculations.total)} - taxa 1,5% ${money(calculations.taxa)} - imposto ${money(calculations.imposto)} - descontos ${money(calculations.descontos || 0)}` : `Global ${money(calculations.global)} - recebido ${money(calculations.recebido)} - saldo ${money(calculations.saldo)}`}</small></div><div className="form-actions wide"><button type="button" className="button button-muted" onClick={() => setShowForm(false)}>Cancelar</button><button className="button button-primary" disabled={saving}>{saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Salvar lançamento'}</button></div>
     </form></div></div>}
     <section className="table-panel"><div className="section-title"><div><span className="eyebrow">Competência selecionada</span><h2>{monthLabel(month)}</h2></div><button className="button button-muted" onClick={() => window.print()}><FileDown size={17} /> Imprimir</button></div><div className="table-wrap"><table className={tipo === 'socio' ? 'tbl-socio' : 'tbl-terc'}><thead><tr>{(tipo === 'socio' ? socCols : tercCols).map((col) => <th key={col}>{col}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={tipo === 'socio' ? socCols.length : tercCols.length} className="empty-state">Carregando lançamentos...</td></tr> : filtered.length === 0 ? <tr><td colSpan={tipo === 'socio' ? socCols.length : tercCols.length} className="empty-state"><ClipboardList size={32} /><strong>Nenhum lançamento encontrado</strong><span>Cadastre um lançamento para esta competência.</span></td></tr> : filtered.map((item) => {
       const global = Number(item.valor || 0) - Number(item.desconto_paciente || 0) - Number(item.desconto_cartao || 0) - Number(item.valor_glosa || 0);
       const impostoValor = tipo === 'socio' ? (Number(item.valor || 0) + Number(item.auxilio_1 || 0) + Number(item.auxilio_2 || 0)) * Number(item.imposto_percentual || 0) / 100 : 0;
+      const descontosValor = tipo === 'socio' ? (() => {
+        const base = Number(item.valor || 0) + Number(item.auxilio_1 || 0) + Number(item.auxilio_2 || 0);
+        return (item as any).desc_adm === false ? 0 : base * 0.01 + ((item as any).desc_chefe_faturamento === false ? 0 : base * 0.0075) + ((item as any).desc_faturista === false ? 0 : base * 0.005) + ((item as any).desc_autorizacao === false ? 0 : base * 0.0025);
+      })() : 0;
       const statusLabel = item.status_pagamento === 'pago' ? 'Pago' : item.status_pagamento === 'aprovado' ? 'Aprovado' : 'Pendente';
       const actions = isReadOnly ? <td></td> : <td><div className="row-actions"><button className="icon-button" onClick={() => openEdit(item)}><Pencil size={16} /></button><button className="icon-button danger" onClick={() => void remove(item.id)}><Trash2 size={16} /></button></div></td>;
       const statusCell = <td><span className={`status-pill status-${item.status_pagamento || 'pendente'}`}>{statusLabel}</span></td>;
       if (tipo === 'terceiro') return <tr key={item.id}><td>{item.numero_atendimento || '-'}</td><td><strong>{item.medico?.nome || '-'}</strong></td><td>{dateLabel(item.data_cirurgia)}</td><td>{item.nome_paciente}</td><td>{item.tipo_procedimento || 'Consulta'}</td><td>{item.forma_pagamento || '-'}</td><td>{item.quantidade || 1}</td><td>{money(item.valor)}</td><td className="negative">{money(item.desconto_paciente)}</td><td className="negative">{money(item.desconto_cartao)}</td><td className="negative">{money(item.valor_glosa)}</td><td>{money(global)}</td><td>{money(item.valor_recebido)}</td><td>{Number(item.percentual_terceiro || 0).toFixed(0)}%</td><td className="positive strong">{money(item.valor_terceiro || item.valor_liquido)}</td><td className="positive strong">{money(item.saldo_controle)}</td>{statusCell}{actions}</tr>;
-      return <tr key={item.id}><td>{item.numero_atendimento || '-'}</td><td><strong>{item.medico?.nome || '-'}</strong></td><td>{dateLabel(item.data_cirurgia)}</td><td>{item.nome_paciente}</td><td>{item.tipo_procedimento || 'Consulta'}</td><td>{item.forma_pagamento || '-'}</td><td>{item.quantidade || 1}</td><td>{money(item.valor)}</td><td className="negative">{money(item.desconto_paciente)}</td><td className="negative">{money(item.desconto_cartao)}</td><td className="negative">{money(item.valor_glosa)}</td><td>{money(global)}</td><td>{money(item.valor_recebido)}</td><td className="negative">{money(item.taxa_1_5)}</td><td>{Number(item.imposto_percentual || 0).toFixed(2)}%</td><td className="negative">{money(impostoValor)}</td><td className="negative">{money(item.outras_deducoes)}</td><td className="positive strong">{money(item.valor_liquido || item.valor_repasse_medico)}</td>{statusCell}{actions}</tr>;
+      return <tr key={item.id}><td>{item.numero_atendimento || '-'}</td><td><strong>{item.medico?.nome || '-'}</strong></td><td>{dateLabel(item.data_cirurgia)}</td><td>{item.nome_paciente}</td><td>{item.tipo_procedimento || '-'}</td><td>{item.forma_pagamento || '-'}</td><td>{item.quantidade || 1}</td><td>{money(item.valor)}</td><td className="negative">{money(item.taxa_1_5)}</td><td>{Number(item.imposto_percentual || 0).toFixed(2)}%</td><td className="negative">{money(impostoValor)}</td><td className="negative">{money(descontosValor)}</td><td className="negative">{money(item.outras_deducoes)}</td><td className="positive strong">{money(item.valor_liquido || item.valor_repasse_medico)}</td>{statusCell}{actions}</tr>;
     })}</tbody></table></div></section>
   </div>;
 }
