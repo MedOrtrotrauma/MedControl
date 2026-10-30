@@ -26,7 +26,7 @@ const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 /* ───────────── Cálculo por lançamento ───────────── */
 function calcRow(r: Repasse) {
   const a = r as any;
-  const base = Number(r.valor || 0) + Number(r.auxilio_1 || 0) + Number(r.auxilio_2 || 0);
+  const base = Number(r.valor || 0) - Number(r.auxilio_1 || 0) - Number(r.auxilio_2 || 0);
   const taxa = base * 0.015;
   const imposto = (base * Number(r.imposto_percentual || 0)) / 100;
   const adm = a.desc_adm !== false ? base * 0.01 : 0;
