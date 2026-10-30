@@ -706,3 +706,4 @@ const BI_CSS = `
 .bi-delta{display:inline-flex;align-items:center;gap:4px}
 .bi-delta.up{color:#2e7d4f}.bi-delta.down{color:#b04545}
 .bi-pager{display:flex;justify-content:center;align-items:center;gap:14px;padding:12px;font-size:13px}
+`;
