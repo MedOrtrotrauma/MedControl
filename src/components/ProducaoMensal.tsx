@@ -120,7 +120,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setParticularLoading(true);
     try {
       const res = await dbHelpers.getRepassesParticularByMonth(selectedMonth);
-      if (res.data) setParticulares(res.data as Repasse[]);
+      if (res.data) setParticulares((res.data as Repasse[]).filter((r) => !r.repasse_particular));
     } catch (error) {
       console.error('Erro ao carregar particulares:', error);
     }
