@@ -78,7 +78,7 @@ export function RepasseComponent({ tipo }: Props) {
   const load = async () => {
     setLoading(true);
     const [repasseResult, medicosResult, hospitaisResult, procedimentosResult, cirurgiasResult] = await Promise.all([
-      dbHelpers.getRepassesByMonthAndTipo(month, tipo), dbHelpers.getMedicos(), dbHelpers.getHospitais(), dbHelpers.getProcedimentos(), dbHelpers.getCirurgias(),
+      dbHelpers.getRepasseCirurgiasByMonthAndTipo(month, tipo), dbHelpers.getMedicos(), dbHelpers.getHospitais(), dbHelpers.getProcedimentos(), dbHelpers.getCirurgias(),
     ]);
     if (repasseResult.error || medicosResult.error || hospitaisResult.error || procedimentosResult.error || cirurgiasResult.error) setError('Não foi possível carregar os lançamentos.');
     else {
@@ -161,7 +161,7 @@ export function RepasseComponent({ tipo }: Props) {
       valor_liquido: calculations.repasse, status_pagamento: form.status_pagamento,
       data_pagamento: form.status_pagamento === 'pago' ? new Date().toISOString().slice(0, 10) : null,
     };
-    const result = editing ? await dbHelpers.updateRepasse(editing.id, payload) : await dbHelpers.createRepasse(payload);
+    const result = editing ? await dbHelpers.updateRepasseCirurgia(editing.id, payload) : await dbHelpers.createRepasseCirurgia(payload);
     if (result.error) setError('Não foi possível salvar o repasse. Confira os campos.');
     else { setShowForm(false); await load(); }
     setSaving(false);
@@ -169,7 +169,7 @@ export function RepasseComponent({ tipo }: Props) {
 
   const remove = async (id: number) => {
     if (!window.confirm('Excluir este lançamento de repasse?')) return;
-    const result = await dbHelpers.deleteRepasse(id);
+    const result = await dbHelpers.deleteRepasseCirurgia(id);
     if (result.error) setError('Não foi possível excluir o lançamento.'); else await load();
   };
 
@@ -185,7 +185,7 @@ export function RepasseComponent({ tipo }: Props) {
   const buscarCirurgias = async () => {
     if (!repasseMedicoId) { alert('Selecione um médico.'); return; }
     setRepasseLoading(true);
-    const result = await dbHelpers.getRepassesByMonthAndTipo(month, tipo);
+    const result = await dbHelpers.getRepasseCirurgiasByMonthAndTipo(month, tipo);
     if (result.error) { alert('Erro ao buscar cirurgias.'); setRepasseLoading(false); return; }
     const allRepasses = (result.data as Repasse[]) || [];
     const medicoCirurgias = allRepasses.filter((r) => String(r.medico_id) === repasseMedicoId);
@@ -235,7 +235,7 @@ export function RepasseComponent({ tipo }: Props) {
         status_pagamento: 'pago' as StatusPagamento,
         data_pagamento: new Date().toISOString().slice(0, 10),
       };
-      await dbHelpers.updateRepasse(cirurgiaItem.id, payload);
+      await dbHelpers.updateRepasseCirurgia(cirurgiaItem.id, payload);
     }
     setRepasseRealizado(true);
     setRepasseLoading(false);
@@ -255,7 +255,7 @@ export function RepasseComponent({ tipo }: Props) {
   const repassesRealizados = useMemo(() => filtered.filter((item) => item.status_pagamento === 'pago'), [filtered]);
   const totalRealizado = repassesRealizados.reduce((sum, item) => sum + Number(item.valor_liquido || item.valor_repasse_medico || 0), 0);
 
-  const title = tipo === 'socio' ? 'Repasse para sócios' : 'Repasse a terceiros';
+  const title = tipo === 'socio' ? 'Repasse cirurgia' : 'Repasse a terceiros';
   const socCols = ['Nº', 'Médico', 'Data', 'Paciente', 'Procedimento', 'Forma pagto', 'Qtde', 'Valor total', 'Auxílios', '1,5%', 'Imposto %', 'Imposto R$', 'Descontos', 'Outras ded.', 'Fixo clínica', 'Repasse', 'Status', 'Ações'];
   const tercCols = ['Nº', 'Médico', 'Data', 'Paciente', 'Procedimento', 'Forma pagto', 'Qtde', 'Valor total', 'Desc. paciente', 'Desc. cartão', 'Glosa', 'Global', 'Recebido', 'Repasse %', 'Repasse R$', 'Saldo', 'Status', 'Ações'];
 
@@ -374,7 +374,7 @@ export function RepasseComponent({ tipo }: Props) {
   };
 
   return <div className="space-y-6">
-    <section className="hero-panel"><div><div className="eyebrow"><ReceiptText size={15} /> Financeiro médico</div><h1>{title}</h1><p>Controle financeiro dos repasses {tipo === 'socio' ? 'entre sócios' : 'a profissionais terceiros'}.</p></div><div className="hero-actions"><label className="month-picker"><CalendarDays size={16} /><select value={month} onChange={(event) => setMonth(event.target.value)}>{months().map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>{!isReadOnly && <button className="button button-light" onClick={openNew}><Plus size={18} /> Novo lançamento</button>}{!isReadOnly && tipo === 'socio' && <button className="button button-primary" onClick={openRepasseModal}><Check size={18} /> Realizar repasse</button>}</div></section>
+    <section className="hero-panel"><div><div className="eyebrow"><ReceiptText size={15} /> Financeiro médico</div><h1>{title}</h1><p>Controle financeiro dos repasses {tipo === 'socio' ? 'de cirurgias' : 'a profissionais terceiros'}.</p></div><div className="hero-actions"><label className="month-picker"><CalendarDays size={16} /><select value={month} onChange={(event) => setMonth(event.target.value)}>{months().map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>{!isReadOnly && <button className="button button-light" onClick={openNew}><Plus size={18} /> Novo lançamento</button>}{!isReadOnly && tipo === 'socio' && <button className="button button-primary" onClick={openRepasseModal}><Check size={18} /> Realizar repasse</button>}</div></section>
     <section className="summary-grid"><div className="summary-card summary-blue"><span>{tipo === 'socio' ? 'Total da produção' : 'Valor total'}</span><strong>{money(gross)}</strong><small>{filtered.length} lançamentos no período</small><ArrowUpRight /></div><div className="summary-card summary-green"><span>{tipo === 'socio' ? 'Valor de repasse' : 'Repasse profissional'}</span><strong>{money(totals)}</strong><small>Calculado pela regra selecionada</small><Check /></div><div className="summary-card summary-amber"><span>{tipo === 'socio' ? 'Descontos' : 'Saldo da clínica'}</span><strong>{money(tipo === 'socio' ? deductions : filtered.reduce((sum, item) => sum + Number(item.saldo_controle || 0), 0))}</strong><small>{tipo === 'socio' ? '1,5%, imposto e deduções' : 'Valor recebido menos repasse'}</small><ArrowDownRight /></div></section>
     <section className="filter-panel"><div className="filter-heading"><Filter size={17} /><strong>Filtrar lançamentos</strong></div><div className="filter-grid"><label className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar médico ou paciente" /></label><select value={medico} onChange={(event) => setMedico(event.target.value)}><option value="">Todos os médicos</option>{medicos.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select><select value={status} onChange={(event) => setStatus(event.target.value as 'todos' | StatusPagamento)}><option value="todos">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select></div></section>
     {error && <div className="alert-error">{error}</div>}

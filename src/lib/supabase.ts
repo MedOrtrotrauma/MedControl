@@ -414,6 +414,55 @@ export const dbHelpers = {
     return { data, error };
   },
 
+  // ============================================
+  // Repasse Cirurgias (tabela separada)
+  // ============================================
+
+  async getRepasseCirurgiasByMonthAndTipo(month: string, destinatarioTipo: DestinatarioTipo) {
+    const { data, error } = await supabase
+      .from('repasse_cirurgias')
+      .select(`
+        *,
+        medico:medicos(*),
+        convenio:convenios(*),
+        hospital:hospitais(*),
+        cirurgia:cirurgias(*)
+      `)
+      .eq('month_reference', month)
+      .eq('destinatario_tipo', destinatarioTipo)
+      .order('data_cirurgia', { ascending: false });
+    return { data, error };
+  },
+
+  async createRepasseCirurgia(repasse: Omit<any, 'id' | 'created_at'>) {
+    const cleanRepasse = Object.fromEntries(
+      Object.entries(repasse).filter(([_, value]) => value !== undefined && value !== null)
+    );
+
+    const { data, error } = await supabase
+      .from('repasse_cirurgias')
+      .insert([cleanRepasse])
+      .select();
+    return { data, error };
+  },
+
+  async updateRepasseCirurgia(id: number, repasse: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('repasse_cirurgias')
+      .update(repasse)
+      .eq('id', id)
+      .select();
+    return { data, error };
+  },
+
+  async deleteRepasseCirurgia(id: number) {
+    const { data, error } = await supabase
+      .from('repasse_cirurgias')
+      .delete()
+      .eq('id', id);
+    return { data, error };
+  },
+
   // Repasse Imagem
   async getRepassesImagemByMonth(month: string) {
     const { data, error } = await supabase
