@@ -31,6 +31,12 @@ export interface Procedimento {
   created_at?: string;
 }
 
+export interface Cirurgia {
+  id: number;
+  nome: string;
+  created_at?: string;
+}
+
 export interface RepasseImagem {
   id: number;
   month_reference: string;
@@ -105,4 +111,11 @@ export interface Repasse {
   vinculo?: 'externo' | 'socio';
   valor_repasse: number;
   check_conferencia: boolean;
+  desc_adm?: boolean;
+  desc_chefe_faturamento?: boolean;
+  desc_faturista?: boolean;
+  desc_autorizacao?: boolean;
+  desconto_fixo_clinica?: number;
+  cirurgia_id?: number | null;
+  cirurgia?: Cirurgia;
 }

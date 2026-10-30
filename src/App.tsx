@@ -7,9 +7,11 @@ import {
   ChevronRight,
   CircleDollarSign,
   FileText,
+  LayoutDashboard,
   LogOut,
   Menu,
   Settings2,
+  Scissors,
   Stethoscope,
   UserRound,
   UsersRound,
@@ -19,22 +21,28 @@ import {
 import { RepasseComponent } from './components/Repasse';
 import { ProducaoMensalComponent } from './components/ProducaoMensal';
 import { RelatoriosComponent } from './components/Relatorios';
+import { DashboardComponent } from './components/Dashboard';
 import { MedicosCadastro } from './components/Cadastros/MedicosCadastro';
 import { ConveniosCadastro } from './components/Cadastros/ConveniosCadastro';
 import { HospitaisCadastro } from './components/Cadastros/HospitaisCadastro';
 import { UnidadesCadastro } from './components/Cadastros/UnidadesCadastro';
 import { ProcedimentosCadastro } from './components/Cadastros/ProcedimentosCadastro';
+import { CirurgiasCadastro } from './components/Cadastros/CirurgiasCadastro';
 import { UsuariosCadastro } from './components/Cadastros/UsuariosCadastro';
 import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
 import type { TipoUsuario } from './components/Auth/AuthContext';
 
-type Page = 'repasse_socios' | 'imagem' | 'particulares' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'usuarios';
+type Page = 'repasse_socios' | 'imagem' | 'particulares' | 'relatorios' | 'dashboard' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
 
 interface MenuItem { id: Page; label: string; icon: typeof BarChart3; }
 interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; roles: TipoUsuario[]; }
 
 const menuGroups: MenuGroup[] = [
+  {
+    label: 'Dashboard', icon: LayoutDashboard, roles: ['administrativo', 'medico'],
+    items: [{ id: 'dashboard', label: 'Dashboard BI', icon: BarChart3 }],
+  },
   {
     label: 'Repasse médico', icon: CircleDollarSign, roles: ['administrativo', 'medico'],
     items: [
@@ -61,6 +69,7 @@ const menuGroups: MenuGroup[] = [
       { id: 'hospitais', label: 'Hospitais e clínicas', icon: Building2 },
       { id: 'unidades', label: 'Unidades', icon: Building2 },
       { id: 'procedimentos', label: 'Procedimentos', icon: Stethoscope },
+      { id: 'cirurgias', label: 'Cirurgias', icon: Scissors },
       { id: 'usuarios', label: 'Usuários', icon: ShieldCheck },
     ],
   },
@@ -69,11 +78,13 @@ const menuGroups: MenuGroup[] = [
 const pageTitles: Record<Page, string> = {
   repasse_socios: 'Repasse a sócios',
   relatorios: 'Relatório de repasses',
+  dashboard: 'Dashboard BI',
   medicos: 'Médicos',
   convenios: 'Convênios',
   hospitais: 'Hospitais e clínicas',
   unidades: 'Unidades',
   procedimentos: 'Procedimentos',
+  cirurgias: 'Cirurgias',
   usuarios: 'Cadastro de usuários',
   imagem: 'Imagem',
   particulares: 'Particulares',
@@ -84,7 +95,7 @@ function AppContent() {
   const [page, setPage] = useState<Page>('repasse_socios');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasse médico', 'Imagem', 'Particulares']));
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Dashboard', 'Repasse médico', 'Imagem', 'Particulares']));
 
   if (loading) return <div className="loading-screen"><img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" /><span>Carregando seu espaço...</span></div>;
   if (!user) return <LoginForm />;
@@ -116,11 +127,13 @@ function AppContent() {
       case 'imagem': return <ProducaoMensalComponent initialTab="repasse-imagem" visibleTabs={['repasse-imagem']} />;
       case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'relatorios': return <RelatoriosComponent />;
+      case 'dashboard': return <DashboardComponent />;
       case 'medicos': return <MedicosCadastro />;
       case 'convenios': return <ConveniosCadastro />;
       case 'hospitais': return <HospitaisCadastro />;
       case 'unidades': return <UnidadesCadastro />;
       case 'procedimentos': return <ProcedimentosCadastro />;
+      case 'cirurgias': return <CirurgiasCadastro />;
       case 'usuarios': return <UsuariosCadastro />;
       default: return <RepasseComponent tipo="socio" />;
     }

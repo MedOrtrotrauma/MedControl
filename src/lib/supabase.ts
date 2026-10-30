@@ -179,6 +179,40 @@ export const dbHelpers = {
     return { data, error };
   },
 
+  // Cirurgias
+  async getCirurgias() {
+    const { data, error } = await supabase
+      .from('cirurgias')
+      .select('*')
+      .order('nome');
+    return { data, error };
+  },
+
+  async createCirurgia(cirurgia: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('cirurgias')
+      .insert([cirurgia])
+      .select();
+    return { data, error };
+  },
+
+  async updateCirurgia(id: number, cirurgia: Omit<any, 'id' | 'created_at'>) {
+    const { data, error } = await supabase
+      .from('cirurgias')
+      .update(cirurgia)
+      .eq('id', id)
+      .select();
+    return { data, error };
+  },
+
+  async deleteCirurgia(id: number) {
+    const { data, error } = await supabase
+      .from('cirurgias')
+      .delete()
+      .eq('id', id);
+    return { data, error };
+  },
+
   // Produção Mensal
   async getProducaoMensal() {
     const { data, error } = await supabase
@@ -437,10 +471,10 @@ export const dbHelpers = {
   },
 
   // Relatório: todos repasses com joins para filtros
-  async getRepassesForReport(filters: { medico?: string; hospital?: string; procedimento?: string; unidade?: string; paciente?: string; dataInicio?: string; dataFim?: string; tipo?: DestinatarioTipo | 'todos' }) {
+  async getRepassesForReport(filters: { medico?: string; hospital?: string; procedimento?: string; unidade?: string; paciente?: string; dataInicio?: string; dataFim?: string; tipo?: DestinatarioTipo | 'todos'; cirurgia?: string }) {
     let query = supabase
       .from('repasses')
-      .select(`*, medico:medicos(*), convenio:convenios(*), hospital:hospitais(*)`)
+      .select(`*, medico:medicos(*), convenio:convenios(*), hospital:hospitais(*), cirurgia:cirurgias(*)`)
       .order('data_cirurgia', { ascending: false });
     if (filters.tipo && filters.tipo !== 'todos') query = query.eq('destinatario_tipo', filters.tipo);
     if (filters.medico) query = query.eq('medico_id', Number(filters.medico));
@@ -448,6 +482,7 @@ export const dbHelpers = {
     if (filters.unidade) query = query.ilike('unidade', `%${filters.unidade}%`);
     if (filters.paciente) query = query.ilike('nome_paciente', `%${filters.paciente}%`);
     if (filters.procedimento) query = query.ilike('tipo_procedimento', `%${filters.procedimento}%`);
+    if (filters.cirurgia) query = query.eq('cirurgia_id', Number(filters.cirurgia));
     if (filters.dataInicio) query = query.gte('data_cirurgia', filters.dataInicio);
     if (filters.dataFim) query = query.lte('data_cirurgia', filters.dataFim);
     const { data, error } = await query;

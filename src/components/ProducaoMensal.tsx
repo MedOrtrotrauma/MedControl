@@ -18,6 +18,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
+import { useAuth } from './Auth/AuthContext';
 import { ProducaoMensal, Medico, Convenio, Repasse, Unidade, Procedimento, RepasseImagem, Hospital } from '../types';
 import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
@@ -29,6 +30,8 @@ interface ProducaoMensalProps {
 }
 
 export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initialTab = 'convenios', visibleTabs }) => {
+  const { perfil } = useAuth();
+  const isAdmin = perfil?.tipo === 'administrativo';
   const [activeView, setActiveView] = useState<'form' | 'report'>('form');
   const [tab, setTab] = useState<'convenios' | 'particular' | 'repasse-imagem'>(initialTab);
   const [producoes, setProducoes] = useState<ProducaoMensal[]>([]);
@@ -1361,14 +1364,25 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
                 />
               </div>
               <div className="md:col-span-2 flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="check_conferencia"
-                  checked={particularForm.check_conferencia}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, check_conferencia: e.target.checked }))}
-                  className="h-5 w-5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
-                />
-                <label htmlFor="check_conferencia" className="text-sm font-medium text-gray-700">Conferido (Check)</label>
+                {isAdmin ? (
+                  <>
+                    <input
+                      type="checkbox"
+                      id="check_conferencia"
+                      checked={particularForm.check_conferencia}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, check_conferencia: e.target.checked }))}
+                      className="h-5 w-5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                    />
+                    <label htmlFor="check_conferencia" className="text-sm font-medium text-gray-700">Conferido (Check)</label>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${particularForm.check_conferencia ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                      {particularForm.check_conferencia ? '✓' : ''}
+                    </span>
+                    <label className="text-sm font-medium text-gray-500">Conferido (apenas administrador)</label>
+                  </div>
+                )}
               </div>
               <div className="md:col-span-2 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowParticularForm(false)} className="px-6 py-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
