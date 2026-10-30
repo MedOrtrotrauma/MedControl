@@ -329,7 +329,7 @@ export function RepasseParticularComponent() {
           <small>{filtered.length} lançamentos · {monthLabel(month)}</small><DollarSign />
         </div>
         <div className="summary-card summary-blue">
-          <span>Total deduções</span><strong>{money(totalDeductions)}</strong>
+          <span>Total deduções</span><strong>{money(totalDeducoes)}</strong>
           <small>Taxas, impostos e custos diretos</small><AlertCircle />
         </div>
         <div className="summary-card summary-green">
@@ -410,7 +410,7 @@ export function RepasseParticularComponent() {
                 <tr>
                   <td colSpan={5} style={{ padding: '10px 16px', fontWeight: 600, textAlign: 'right' }}>Totais:</td>
                   <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700 }}>{money(totalBruto)}</td>
-                  <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#b04545' }}>{money(totalDeductions)}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#b04545' }}>{money(totalDeducoes)}</td>
                   <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#2e7d4f' }}>{money(totalLiquido)}</td>
                   <td></td>
                 </tr>
