@@ -52,7 +52,7 @@ h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
 /* ===== Login ===== */
 .login-shell {
   min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
-  background-image: linear-gradient(135deg, rgba(31, 24, 20, .68), rgba(76, 57, 43, .42)), url('/images/WhatsApp_Image_2026-09-25_at_16.22.57.jpeg');
+  background: linear-gradient(135deg, #3a1f5a 0%, #4a2d6e 50%, #6b4f8c 100%);
   background-size: cover; background-position: center; background-attachment: fixed;
   position: relative; overflow: auto;
 }
