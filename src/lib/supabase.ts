@@ -226,7 +226,6 @@ export const dbHelpers = {
     return { data, error };
   },
 
-  // NOVA FUNÇÃO: Produção Mensal por Mês
   async getProducaoMensalByMonth(month: string) {
     const { data, error } = await supabase
       .from('producao_mensal')
@@ -306,7 +305,8 @@ export const dbHelpers = {
     return { data, error };
   },
 
-  async getRepassesByMonthAndTipo(month: string, destinatarioTipo: DestinatarioTipo) {
+  // Tela de cirurgia (antiga tela "repasse sócio")
+  async getRepassesCirurgiaByMonth(month: string) {
     const { data, error } = await supabase
       .from('repasses')
       .select(`
@@ -316,8 +316,43 @@ export const dbHelpers = {
         hospital:hospitais(*)
       `)
       .eq('month_reference', month)
+      .eq('categoria_lancamento', 'cirurgia')
+      .order('data_cirurgia', { ascending: false });
+    return { data, error };
+  },
+
+  // Tela de terceiros (procedimentos de terceiros, não particulares)
+  async getRepassesTerceiroByMonth(month: string) {
+    const { data, error } = await supabase
+      .from('repasses')
+      .select(`
+        *,
+        medico:medicos(*),
+        convenio:convenios(*),
+        hospital:hospitais(*)
+      `)
+      .eq('month_reference', month)
+      .eq('categoria_lancamento', 'procedimento')
+      .eq('destinatario_tipo', 'terceiro')
+      .order('data_cirurgia', { ascending: false });
+    return { data, error };
+  },
+
+  // Compatibilidade: mantida para não quebrar outras chamadas.
+  // Filtra por categoria conforme o destinatário.
+  async getRepassesByMonthAndTipo(month: string, destinatarioTipo: DestinatarioTipo) {
+    const categoria = destinatarioTipo === 'socio' ? 'cirurgia' : 'procedimento';
+    const { data, error } = await supabase
+      .from('repasses')
+      .select(`
+        *,
+        medico:medicos(*),
+        convenio:convenios(*),
+        hospital:hospitais(*)
+      `)
+      .eq('month_reference', month)
+      .eq('categoria_lancamento', categoria)
       .eq('destinatario_tipo', destinatarioTipo)
-      .neq('is_particular', true)
       .order('data_cirurgia', { ascending: false });
     return { data, error };
   },
@@ -331,7 +366,7 @@ export const dbHelpers = {
         hospital:hospitais(*)
       `)
       .eq('month_reference', month)
-      .eq('is_particular', true)
+      .eq('categoria_lancamento', 'particular')
       .order('data_cirurgia', { ascending: false });
     return { data, error };
   },
@@ -351,11 +386,10 @@ export const dbHelpers = {
   },
 
   async createRepasse(repasse: Omit<any, 'id' | 'created_at'>) {
-    // Limpar campos undefined ou null para evitar erro 400
     const cleanRepasse = Object.fromEntries(
       Object.entries(repasse).filter(([_, value]) => value !== undefined && value !== null)
     );
-    
+
     const { data, error } = await supabase
       .from('repasses')
       .insert([cleanRepasse])
@@ -472,6 +506,7 @@ export const dbHelpers = {
   },
 
   // Relatório: todos repasses com joins para filtros
+  // NÃO filtra por categoria — traz cirurgias + procedimentos + particulares.
   async getRepassesForReport(filters: { medico?: string; hospital?: string; procedimento?: string; unidade?: string; paciente?: string; dataInicio?: string; dataFim?: string; tipo?: DestinatarioTipo | 'todos'; cirurgia?: string }) {
     let query = supabase
       .from('repasses')
