@@ -317,6 +317,7 @@ export const dbHelpers = {
       `)
       .eq('month_reference', month)
       .eq('destinatario_tipo', destinatarioTipo)
+      .neq('is_particular', true)
       .order('data_cirurgia', { ascending: false });
     return { data, error };
   },
