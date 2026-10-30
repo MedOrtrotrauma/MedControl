@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { RepasseComponent } from './components/Repasse';
 import { ProducaoMensalComponent } from './components/ProducaoMensal';
+import { ImagemComponent } from './components/Imagem';
 import { RelatoriosComponent } from './components/Relatorios';
 import { DashboardComponent } from './components/Dashboard';
 import { MedicosCadastro } from './components/Cadastros/MedicosCadastro';
@@ -126,7 +127,7 @@ function AppContent() {
       case 'dashboard': return <DashboardComponent />;
       case 'repasse_socios': return <RepasseComponent tipo="socio" />;
       case 'repasse_particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
-      case 'imagem': return <ProducaoMensalComponent initialTab="repasse-imagem" visibleTabs={['repasse-imagem']} />;
+      case 'imagem': return <ImagemComponent />;
       case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'relatorios': return <RelatoriosComponent />;
       case 'medicos': return <MedicosCadastro />;
