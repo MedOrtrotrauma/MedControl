@@ -35,9 +35,10 @@ function calcRow(r: Repasse) {
   const aut = a.desc_autorizacao !== false ? base * 0.0025 : 0;
   const fixo = Number(a.desconto_fixo_clinica || 0);
   const outras = Number(r.outras_deducoes || 0);
-  const descontos = taxa + imposto + adm + chefe + fat + aut + fixo + outras;
+  const descontos = taxa + adm + chefe + fat + aut + outras;
+  const totalDeducoes = descontos + imposto + fixo;
   const liquido = Number(r.valor_liquido || r.valor_repasse_medico || 0);
-  return { base, taxa, imposto, adm, chefe, fat, aut, fixo, outras, descontos, liquido };
+  return { base, taxa, imposto, adm, chefe, fat, aut, fixo, outras, descontos, totalDeducoes, liquido };
 }
 
 const monthKey = (r: Repasse) => r.month_reference || (r.data_cirurgia ? r.data_cirurgia.slice(0, 7) : '');
@@ -320,14 +321,16 @@ export function DashboardComponent() {
     const totalCirurgias = filtered.filter((r) => r.tipo === 'cirurgia').length;
     const totalProcedimentos = filtered.filter((r) => r.tipo === 'consulta').length;
     const valorTotal = calc.reduce((s, x) => s + x.c.base, 0);
+    const totalImpostos = calc.reduce((s, x) => s + x.c.imposto, 0);
     const totalDescontos = calc.reduce((s, x) => s + x.c.descontos, 0);
     const valorRepassado = calc.reduce((s, x) => s + x.c.liquido, 0);
     const count = filtered.length;
     return {
-      totalCirurgias, totalProcedimentos, valorTotal, totalDescontos, valorRepassado, count,
+      totalCirurgias, totalProcedimentos, valorTotal, totalImpostos, totalDescontos, valorRepassado, count,
       ticket: count ? valorTotal / count : 0,
       taxaRepasse: valorTotal ? (valorRepassado / valorTotal) * 100 : 0,
       taxaDesconto: valorTotal ? (totalDescontos / valorTotal) * 100 : 0,
+      taxaImposto: valorTotal ? (totalImpostos / valorTotal) * 100 : 0,
     };
   }, [filtered, calc]);
 
@@ -338,7 +341,7 @@ export function DashboardComponent() {
       const m = monthKey(r);
       if (!m) return;
       const cur = map.get(m) || { bruto: 0, desc: 0, liq: 0, qtd: 0 };
-      cur.bruto += c.base; cur.desc += c.descontos; cur.liq += c.liquido; cur.qtd += 1;
+      cur.bruto += c.base; cur.desc += c.totalDeducoes; cur.liq += c.liquido; cur.qtd += 1;
       map.set(m, cur);
     });
     const keys = Array.from(map.keys()).sort();
@@ -452,11 +455,11 @@ export function DashboardComponent() {
   };
 
   const exportCsv = () => {
-    const head = ['Data', 'Médico', 'Paciente', 'Cirurgia', 'Procedimento', 'Tipo', 'Valor bruto', 'Descontos', 'Repasse'];
+    const head = ['Data', 'Médico', 'Paciente', 'Cirurgia', 'Procedimento', 'Tipo', 'Valor bruto', 'Imposto', 'Descontos', 'Fixo clínica', 'Repasse'];
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
     const lines = tableRows.map(({ r, c }) => [
       formatDate(r.data_cirurgia), r.medico?.nome || '', r.nome_paciente || '', r.cirurgia?.nome || '',
-      r.tipo_procedimento || '', r.tipo || '', c.base.toFixed(2), c.descontos.toFixed(2), c.liquido.toFixed(2),
+      r.tipo_procedimento || '', r.tipo || '', c.base.toFixed(2), c.imposto.toFixed(2), c.descontos.toFixed(2), c.fixo.toFixed(2), c.liquido.toFixed(2),
     ].map(esc).join(';'));
     const blob = new Blob(['\ufeff' + [head.map(esc).join(';'), ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -544,8 +547,12 @@ export function DashboardComponent() {
           <Wallet />
         </div>
         <div className="summary-card summary-blue">
+          <span>Total impostos</span><strong>{money(stats.totalImpostos)}</strong>
+          <small>{pct(stats.taxaImposto)} do bruto</small><Receipt />
+        </div>
+        <div className="summary-card summary-amber">
           <span>Total descontos</span><strong>{money(stats.totalDescontos)}</strong>
-          <small>{pct(stats.taxaDesconto)} do bruto</small><Receipt />
+          <small>Adm 1% · Chefe 0,75% · Faturista 0,5%</small><Receipt />
         </div>
       </section>
 
@@ -625,12 +632,12 @@ export function DashboardComponent() {
                   <tr>
                     <Th k="data">Data</Th><Th k="medico">Médico</Th><Th k="paciente">Paciente</Th>
                     <th>Cirurgia</th><th>Procedimento</th>
-                    <Th k="valor" right>Valor</Th><th style={{ textAlign: 'right' }}>Descontos</th><Th k="repasse" right>Repasse</Th>
+                    <Th k="valor" right>Valor</Th><th style={{ textAlign: 'right' }}>Imposto</th><th style={{ textAlign: 'right' }}>Descontos</th><th style={{ textAlign: 'right' }}>Fixo clínica</th><Th k="repasse" right>Repasse</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageRows.length === 0 ? (
-                    <tr><td colSpan={8} className="empty-state">Nenhum lançamento encontrado</td></tr>
+                    <tr><td colSpan={10} className="empty-state">Nenhum lançamento encontrado</td></tr>
                   ) : pageRows.map(({ r, c }) => (
                     <tr key={r.id}>
                       <td>{formatDate(r.data_cirurgia)}</td>
@@ -639,7 +646,9 @@ export function DashboardComponent() {
                       <td>{r.cirurgia?.nome || '-'}</td>
                       <td>{r.tipo_procedimento || '-'}</td>
                       <td style={{ textAlign: 'right' }}>{money(c.base)}</td>
+                      <td style={{ textAlign: 'right' }}>{money(c.imposto)}</td>
                       <td style={{ textAlign: 'right' }}>{money(c.descontos)}</td>
+                      <td style={{ textAlign: 'right' }}>{money(c.fixo)}</td>
                       <td className="positive strong" style={{ textAlign: 'right' }}>{money(c.liquido)}</td>
                     </tr>
                   ))}
