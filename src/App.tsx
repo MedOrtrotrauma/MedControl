@@ -33,20 +33,17 @@ import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
 import type { TipoUsuario } from './components/Auth/AuthContext';
 
-type Page = 'repasse_socios' | 'imagem' | 'particulares' | 'relatorios' | 'dashboard' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
+type Page = 'dashboard' | 'repasse_socios' | 'repasse_particulares' | 'imagem' | 'particulares' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
 
 interface MenuItem { id: Page; label: string; icon: typeof BarChart3; }
 interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; roles: TipoUsuario[]; }
 
 const menuGroups: MenuGroup[] = [
   {
-    label: 'Dashboard', icon: LayoutDashboard, roles: ['administrativo', 'medico'],
-    items: [{ id: 'dashboard', label: 'Dashboard BI', icon: BarChart3 }],
-  },
-  {
-    label: 'Repasse médico', icon: CircleDollarSign, roles: ['administrativo', 'medico'],
+    label: 'Repasses', icon: CircleDollarSign, roles: ['administrativo', 'medico'],
     items: [
-      { id: 'repasse_socios', label: 'Repasse a sócios', icon: CircleDollarSign },
+      { id: 'repasse_socios', label: 'Repasses cirurgias', icon: CircleDollarSign },
+      { id: 'repasse_particulares', label: 'Repasse particulares', icon: CircleDollarSign },
     ],
   },
   {
@@ -76,9 +73,10 @@ const menuGroups: MenuGroup[] = [
 ];
 
 const pageTitles: Record<Page, string> = {
-  repasse_socios: 'Repasse a sócios',
+  dashboard: 'Dashboard',
+  repasse_socios: 'Repasses cirurgias',
+  repasse_particulares: 'Repasse particular',
   relatorios: 'Relatório de repasses',
-  dashboard: 'Dashboard BI',
   medicos: 'Médicos',
   convenios: 'Convênios',
   hospitais: 'Hospitais e clínicas',
@@ -92,10 +90,10 @@ const pageTitles: Record<Page, string> = {
 
 function AppContent() {
   const { user, perfil, loading, signOut } = useAuth();
-  const [page, setPage] = useState<Page>('repasse_socios');
+  const [page, setPage] = useState<Page>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Dashboard', 'Repasse médico', 'Imagem', 'Particulares']));
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasses', 'Imagem', 'Particulares']));
 
   if (loading) return <div className="loading-screen"><img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" /><span>Carregando seu espaço...</span></div>;
   if (!user) return <LoginForm />;
@@ -109,7 +107,9 @@ function AppContent() {
 
   const tipo = perfil.tipo;
   const visibleGroups = menuGroups.filter((g) => g.roles.includes(tipo));
-  const defaultPage = 'repasse_socios';
+  const showDashboard = tipo !== 'recepcao';
+  const defaultPage: Page = showDashboard ? 'dashboard' : 'particulares';
+  const currentPage = page;
 
   const toggleGroup = (label: string) => {
     setOpenGroups((prev) => {
@@ -122,12 +122,13 @@ function AppContent() {
   const navigate = (nextPage: Page) => { setPage(nextPage); setSidebarOpen(false); };
 
   const renderPage = () => {
-    switch (page) {
+    switch (currentPage) {
+      case 'dashboard': return <DashboardComponent />;
       case 'repasse_socios': return <RepasseComponent tipo="socio" />;
+      case 'repasse_particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'imagem': return <ProducaoMensalComponent initialTab="repasse-imagem" visibleTabs={['repasse-imagem']} />;
       case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'relatorios': return <RelatoriosComponent />;
-      case 'dashboard': return <DashboardComponent />;
       case 'medicos': return <MedicosCadastro />;
       case 'convenios': return <ConveniosCadastro />;
       case 'hospitais': return <HospitaisCadastro />;
@@ -135,7 +136,7 @@ function AppContent() {
       case 'procedimentos': return <ProcedimentosCadastro />;
       case 'cirurgias': return <CirurgiasCadastro />;
       case 'usuarios': return <UsuariosCadastro />;
-      default: return <RepasseComponent tipo="socio" />;
+      default: return showDashboard ? <DashboardComponent /> : <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
     }
   };
 
@@ -153,6 +154,16 @@ function AppContent() {
         </div>
         <div className="sidebar-caption">{!collapsed && 'MENU PRINCIPAL'}</div>
         <nav>
+          {/* Dashboard as home page button — not inside a menu group, hidden from recepção */}
+          {showDashboard && (
+            <button
+              className={`menu-item ${page === 'dashboard' ? 'active' : ''}`}
+              onClick={() => navigate('dashboard')}
+              title={collapsed ? 'Dashboard' : undefined}
+            >
+              <LayoutDashboard size={16} />{!collapsed && <span>Dashboard</span>}
+            </button>
+          )}
           {visibleGroups.map((group) => {
             const isOpen = openGroups.has(group.label) || collapsed;
             const hasActive = group.items.some((i) => i.id === page);
@@ -182,7 +193,7 @@ function AppContent() {
       <main className="main-area">
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button>
-          <div><span className="breadcrumb">Vertebrare / {pageTitles[page]}</span><h2>{pageTitles[page]}</h2></div>
+          <div><span className="breadcrumb">Vertebrare / {pageTitles[currentPage]}</span><h2>{pageTitles[currentPage]}</h2></div>
           <div className="topbar-actions"><span className="secure-badge"><Settings2 size={15} /> {tipo === 'administrativo' ? 'Administrador' : tipo === 'recepcao' ? 'Recepção' : 'Médico'}</span><div className="top-avatar"><UserRound size={16} /></div></div>
         </header>
         <div className="content-area">{renderPage()}</div>
