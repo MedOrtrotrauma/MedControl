@@ -18,7 +18,16 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from './Auth/AuthContext';
-import type { Cirurgia, DestinatarioTipo, Hospital, Medico, Procedimento, Repasse, StatusPagamento } from '../types';
+import type {
+  Cirurgia,
+  Convenio,
+  DestinatarioTipo,
+  Hospital,
+  Medico,
+  Procedimento,
+  RepasseCirurgia,
+  StatusPagamento,
+} from '../types';
 
 const money = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
@@ -80,7 +89,7 @@ function MoneyInput({
   );
 }
 
-/** Converte número do banco em string segura para os inputs */
+/** Converte número do banco em número seguro para cálculos */
 const safeNum = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -89,6 +98,7 @@ const safeNum = (v: unknown): number => {
 const createForm = (month: string) => ({
   medico_id: '',
   hospital_id: '',
+  convenio_id: '',
   nome_paciente: '',
   data_cirurgia: '',
   tipo: 'cirurgia' as 'consulta' | 'cirurgia',
@@ -104,12 +114,10 @@ const createForm = (month: string) => ({
   observacao: '',
   month_reference: month,
   status_pagamento: 'pendente' as StatusPagamento,
-  // Sócio — descontos administrativos (persistidos como um único número)
   desc_adm: true,
   desc_chefe_faturamento: true,
   desc_faturista: true,
   desc_autorizacao: true,
-  // Sócio — fixo clínica (persistido)
   desconto_fixo_clinica: '0',
   cirurgia_id: '',
 });
@@ -123,13 +131,14 @@ export function RepasseComponent({ tipo }: Props) {
   const { perfil } = useAuth();
   const isReadOnly = perfil?.tipo === 'medico';
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [items, setItems] = useState<Repasse[]>([]);
+  const [items, setItems] = useState<RepasseCirurgia[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [hospitais, setHospitais] = useState<Hospital[]>([]);
+  const [convenios, setConvenios] = useState<Convenio[]>([]);
   const [procedimentos, setProcedimentos] = useState<Procedimento[]>([]);
   const [cirurgias, setCirurgias] = useState<Cirurgia[]>([]);
   const [form, setForm] = useState<FormData>(createForm(month));
-  const [editing, setEditing] = useState<Repasse | null>(null);
+  const [editing, setEditing] = useState<RepasseCirurgia | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -143,15 +152,23 @@ export function RepasseComponent({ tipo }: Props) {
   const [repasseMedicoId, setRepasseMedicoId] = useState('');
   const [repasseFixoClinica, setRepasseFixoClinica] = useState('12500');
   const [repasseLoading, setRepasseLoading] = useState(false);
-  const [repasseCirurgias, setRepasseCirurgias] = useState<Repasse[]>([]);
+  const [repasseCirurgias, setRepasseCirurgias] = useState<RepasseCirurgia[]>([]);
   const [repasseRealizado, setRepasseRealizado] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [repasseResult, medicosResult, hospitaisResult, procedimentosResult, cirurgiasResult] = await Promise.all([
+    const [
+      repasseResult,
+      medicosResult,
+      hospitaisResult,
+      conveniosResult,
+      procedimentosResult,
+      cirurgiasResult,
+    ] = await Promise.all([
       dbHelpers.getRepasseCirurgiasByMonthAndTipo(month, tipo),
       dbHelpers.getMedicos(),
       dbHelpers.getHospitais(),
+      dbHelpers.getConvenios(),
       dbHelpers.getProcedimentos(),
       dbHelpers.getCirurgias(),
     ]);
@@ -159,14 +176,16 @@ export function RepasseComponent({ tipo }: Props) {
       repasseResult.error ||
       medicosResult.error ||
       hospitaisResult.error ||
+      conveniosResult.error ||
       procedimentosResult.error ||
       cirurgiasResult.error
     ) {
       setError('Não foi possível carregar os lançamentos.');
     } else {
-      setItems((repasseResult.data as Repasse[]) || []);
+      setItems((repasseResult.data as RepasseCirurgia[]) || []);
       setMedicos((medicosResult.data as Medico[]) || []);
       setHospitais((hospitaisResult.data as Hospital[]) || []);
+      setConvenios((conveniosResult.data as Convenio[]) || []);
       setProcedimentos((procedimentosResult.data as Procedimento[]) || []);
       setCirurgias((cirurgiasResult.data as Cirurgia[]) || []);
     }
@@ -187,14 +206,15 @@ export function RepasseComponent({ tipo }: Props) {
     setError('');
   };
 
-  const openEdit = (item: Repasse) => {
+  const openEdit = (item: RepasseCirurgia) => {
     setEditing(item);
     setForm({
       medico_id: String(item.medico_id),
       hospital_id: item.hospital_id ? String(item.hospital_id) : '',
+      convenio_id: item.convenio_id ? String(item.convenio_id) : '',
       nome_paciente: item.nome_paciente,
       data_cirurgia: item.data_cirurgia,
-      tipo: item.tipo === 'consulta' ? 'consulta' : 'cirurgia',
+      tipo: item.tipo_procedimento === 'consulta' ? 'consulta' : 'cirurgia',
       valor: nz(item.valor),
       auxilio_1: nz(item.auxilio_1),
       auxilio_2: nz(item.auxilio_2),
@@ -207,12 +227,10 @@ export function RepasseComponent({ tipo }: Props) {
       observacao: item.observacao || '',
       month_reference: item.month_reference || month,
       status_pagamento: item.status_pagamento || 'pendente',
-      // Flags: reconstruímos a partir do desconto_administrativo persistido
-      // (assumimos os 4 ligados se o valor for > 0 — é o comportamento padrão)
-      desc_adm: safeNum(item.desconto_administrativo) > 0 || !item.desconto_administrativo,
-      desc_chefe_faturamento: safeNum(item.desconto_administrativo) > 0 || !item.desconto_administrativo,
-      desc_faturista: safeNum(item.desconto_administrativo) > 0 || !item.desconto_administrativo,
-      desc_autorizacao: safeNum(item.desconto_administrativo) > 0 || !item.desconto_administrativo,
+      desc_adm: true,
+      desc_chefe_faturamento: true,
+      desc_faturista: true,
+      desc_autorizacao: true,
       desconto_fixo_clinica: nz(item.desconto_fixo_clinica),
       cirurgia_id: item.cirurgia_id ? String(item.cirurgia_id) : '',
     });
@@ -250,12 +268,9 @@ export function RepasseComponent({ tipo }: Props) {
         auxilioTotal: numberValue(form.auxilio_1) + numberValue(form.auxilio_2),
       };
     }
-    // terceiro
+    // terceiro: repasse = 60% do valor recebido (regra histórica)
     const recebido = numberValue(form.valor_recebido) || bruto;
-    const repasse = bruto * 0.6; // 60% padrão histórico
-    const valorRepasse = form.valor_recebido
-      ? numberValue(form.valor_recebido) * 0.6
-      : repasse;
+    const repasse = Math.max(0, recebido * 0.6);
     return {
       total: bruto,
       taxa: 0,
@@ -266,7 +281,7 @@ export function RepasseComponent({ tipo }: Props) {
       descFaturista: 0,
       descAutorizacao: 0,
       descFixo: 0,
-      repasse: Math.max(0, valorRepasse),
+      repasse,
       recebido,
       auxilioTotal: 0,
     };
@@ -293,16 +308,19 @@ export function RepasseComponent({ tipo }: Props) {
       return;
     }
 
-    // Payload alinhado EXATAMENTE com as colunas de repasses_cirurgias
-    // (+ desconto_fixo_clinica e desconto_administrativo, adicionadas via migração)
+    const convenioId = form.convenio_id ? Number(form.convenio_id) : null;
+
+    // Payload alinhado com repasses_cirurgias.
+    // A constraint chk_cirurgia_convenio_ou_particular exige:
+    //   ou convenio_id preenchido (is_particular=false), ou is_particular=true.
     const payload = {
       medico_id: Number(form.medico_id),
-      convenio_id: null,
+      convenio_id: convenioId,
       hospital_id: form.hospital_id ? Number(form.hospital_id) : null,
       cirurgia_id: form.cirurgia_id ? Number(form.cirurgia_id) : null,
       nome_paciente: form.nome_paciente.trim(),
       data_cirurgia: form.data_cirurgia,
-      is_particular: false,
+      is_particular: !convenioId,
       tipo_procedimento: form.tipo_procedimento || null,
       quantidade: Math.max(1, safeNum(numberValue(form.quantidade))),
       valor: safeNum(numberValue(form.valor)),
@@ -318,7 +336,6 @@ export function RepasseComponent({ tipo }: Props) {
       valor_repasse_medico: safeNum(calculations.repasse),
       valor_recebido: tipo === 'socio' ? 0 : safeNum(calculations.recebido),
 
-      // Sócio
       auxilio_1: tipo === 'socio' ? safeNum(numberValue(form.auxilio_1)) : 0,
       auxilio_2: tipo === 'socio' ? safeNum(numberValue(form.auxilio_2)) : 0,
       taxa_1_5: tipo === 'socio' ? safeNum(calculations.taxa) : 0,
@@ -337,8 +354,16 @@ export function RepasseComponent({ tipo }: Props) {
       : await dbHelpers.createRepasseCirurgia(payload);
 
     if (result.error) {
-      console.error('SUPABASE 400:', result.error);
-      setError(`Não foi possível salvar: ${result.error.message ?? 'confira os campos.'}`);
+      console.error('SUPABASE 400 — detalhes:', {
+        message: result.error.message,
+        details: (result.error as any).details,
+        hint: (result.error as any).hint,
+        code: (result.error as any).code,
+      });
+      setError(
+        `Não foi possível salvar: ${result.error.message ?? 'confira os campos.'}` +
+          ((result.error as any).details ? ` — ${(result.error as any).details}` : ''),
+      );
     } else {
       setShowForm(false);
       await load();
@@ -374,18 +399,17 @@ export function RepasseComponent({ tipo }: Props) {
       setRepasseLoading(false);
       return;
     }
-    const allRepasses = (result.data as Repasse[]) || [];
+    const allRepasses = (result.data as RepasseCirurgia[]) || [];
     setRepasseCirurgias(allRepasses.filter((r) => String(r.medico_id) === repasseMedicoId));
     setRepasseLoading(false);
   };
 
   /** Cálculo do repasse agregado de um médico (sócio) */
-  const calcCirurgiaSocio = (c: Repasse, fixoClinica: number) => {
+  const calcCirurgiaSocio = (c: RepasseCirurgia, fixoClinica: number) => {
     const base =
       Number(c.valor || 0) - Number(c.auxilio_1 || 0) - Number(c.auxilio_2 || 0);
     const taxa = base * 0.015;
     const imposto = (base * Number(c.imposto_percentual || 0)) / 100;
-    // desconto administrativo persistido (soma dos 4 flags)
     const descAdmin = Number(c.desconto_administrativo || 0);
     const descFixo = fixoClinica || Number(c.desconto_fixo_clinica || 0);
     const outras = Number(c.outras_deducoes || 0);
@@ -483,14 +507,14 @@ export function RepasseComponent({ tipo }: Props) {
   );
   const outrosDescontos = useMemo(
     () =>
-      filtered.reduce((sum, item) => {
-        return (
+      filtered.reduce(
+        (sum, item) =>
           sum +
           Number(item.desconto_administrativo || 0) +
           Number(item.desconto_fixo_clinica || 0) +
-          Number(item.outras_deducoes || 0)
-        );
-      }, 0),
+          Number(item.outras_deducoes || 0),
+        0,
+      ),
     [filtered],
   );
 
@@ -510,6 +534,7 @@ export function RepasseComponent({ tipo }: Props) {
     'Data',
     'Paciente',
     'Procedimento',
+    'Convênio',
     'Forma pagto',
     'Qtde',
     'Valor total',
@@ -530,6 +555,7 @@ export function RepasseComponent({ tipo }: Props) {
     'Data',
     'Paciente',
     'Procedimento',
+    'Convênio',
     'Forma pagto',
     'Qtde',
     'Valor total',
@@ -538,6 +564,11 @@ export function RepasseComponent({ tipo }: Props) {
     'Status',
     'Ações',
   ];
+
+  const convenioLabel = (item: RepasseCirurgia) =>
+    item.is_particular
+      ? 'Particular'
+      : item.convenio?.nome || (item.convenio_id ? `#${item.convenio_id}` : '—');
 
   const printRelatorio = () => {
     const win = window.open('', '_blank');
@@ -698,6 +729,7 @@ export function RepasseComponent({ tipo }: Props) {
           )}
         </div>
       </section>
+
       <section className="summary-grid">
         <div className="summary-card summary-blue">
           <span>{tipo === 'socio' ? 'Total da produção' : 'Valor total'}</span>
@@ -718,6 +750,7 @@ export function RepasseComponent({ tipo }: Props) {
           <Check />
         </div>
       </section>
+
       <section className="filter-panel">
         <div className="filter-heading">
           <Filter size={17} />
@@ -751,7 +784,9 @@ export function RepasseComponent({ tipo }: Props) {
           </select>
         </div>
       </section>
+
       {error && <div className="alert-error">{error}</div>}
+
       {showForm && !isReadOnly && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -803,6 +838,20 @@ export function RepasseComponent({ tipo }: Props) {
                 >
                   <option value="">Selecione</option>
                   {hospitais.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Convênio
+                <select
+                  value={form.convenio_id}
+                  onChange={(event) => update('convenio_id', event.target.value)}
+                >
+                  <option value="">Particular</option>
+                  {convenios.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.nome}
                     </option>
@@ -972,29 +1021,33 @@ export function RepasseComponent({ tipo }: Props) {
                     </div>
                     <div className="checkbox-value-item">
                       <span>Chefe fat. (0,75%)</span>
-                      <strong>{form.desc_chefe_faturamento ? money(calculations.descChefe) : '—'}</strong>
+                      <strong>
+                        {form.desc_chefe_faturamento ? money(calculations.descChefe) : '—'}
+                      </strong>
                     </div>
                     <div className="checkbox-value-item">
                       <span>Faturista (0,5%)</span>
-                      <strong>{form.desc_faturista ? money(calculations.descFaturista) : '—'}</strong>
+                      <strong>
+                        {form.desc_faturista ? money(calculations.descFaturista) : '—'}
+                      </strong>
                     </div>
                     <div className="checkbox-value-item">
                       <span>Autorização (0,25%)</span>
-                      <strong>{form.desc_autorizacao ? money(calculations.descAutorizacao) : '—'}</strong>
+                      <strong>
+                        {form.desc_autorizacao ? money(calculations.descAutorizacao) : '—'}
+                      </strong>
                     </div>
                   </div>
                 </>
               ) : (
-                <>
-                  <label>
-                    Valor recebido
-                    <MoneyInput
-                      value={form.valor_recebido}
-                      placeholder="Se vazio, usa o valor bruto"
-                      onChange={(v) => update('valor_recebido', v)}
-                    />
-                  </label>
-                </>
+                <label>
+                  Valor recebido
+                  <MoneyInput
+                    value={form.valor_recebido}
+                    placeholder="Se vazio, usa o valor bruto"
+                    onChange={(v) => update('valor_recebido', v)}
+                  />
+                </label>
               )}
               <label>
                 Status
@@ -1038,7 +1091,7 @@ export function RepasseComponent({ tipo }: Props) {
                       )} - outras ${money(numberValue(form.outras_deducoes))}`
                     : `Valor bruto ${money(calculations.total)} - recebido ${money(
                         calculations.recebido,
-                      )}`}
+                      )} (60% = ${money(calculations.repasse)})`}
                 </small>
               </div>
               <div className="form-actions wide">
@@ -1343,6 +1396,7 @@ export function RepasseComponent({ tipo }: Props) {
                         <td>{dateLabel(item.data_cirurgia)}</td>
                         <td>{item.nome_paciente}</td>
                         <td>{item.tipo_procedimento || '-'}</td>
+                        <td>{convenioLabel(item)}</td>
                         <td>{item.forma_pagamento || '-'}</td>
                         <td>{item.quantidade || 1}</td>
                         <td>{money(item.valor)}</td>
@@ -1363,6 +1417,7 @@ export function RepasseComponent({ tipo }: Props) {
                       <td>{dateLabel(item.data_cirurgia)}</td>
                       <td>{item.nome_paciente}</td>
                       <td>{item.tipo_procedimento || '-'}</td>
+                      <td>{convenioLabel(item)}</td>
                       <td>{item.forma_pagamento || '-'}</td>
                       <td>{item.quantidade || 1}</td>
                       <td>{money(item.valor)}</td>
@@ -1429,7 +1484,9 @@ export function RepasseComponent({ tipo }: Props) {
                     <td className="negative">
                       -{money(Number(item.auxilio_1 || 0) + Number(item.auxilio_2 || 0))}
                     </td>
-                    <td className="negative">{money(Number(item.desconto_fixo_clinica || 0))}</td>
+                    <td className="negative">
+                      {money(Number(item.desconto_fixo_clinica || 0))}
+                    </td>
                     <td className="positive strong">
                       {money(Number(item.valor_liquido || item.valor_repasse_medico || 0))}
                     </td>
@@ -1439,7 +1496,10 @@ export function RepasseComponent({ tipo }: Props) {
               </tbody>
               <tfoot className="bg-gray-50 border-t border-gray-200">
                 <tr>
-                  <td colSpan={8} className="px-4 py-3 text-sm font-bold text-gray-700 text-right">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-3 text-sm font-bold text-gray-700 text-right"
+                  >
                     Total líquido realizado:
                   </td>
                   <td className="px-4 py-3 text-sm font-bold text-green-700">
