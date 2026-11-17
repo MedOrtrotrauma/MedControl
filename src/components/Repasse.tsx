@@ -247,9 +247,20 @@ export function RepasseComponent({ tipo }: Props) {
     return text.includes(search.toLowerCase()) && (status === 'todos' || item.status_pagamento === status) && (!medico || String(item.medico_id) === medico);
   }), [items, search, status, medico]);
 
-  const totals = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.valor_liquido || item.valor_repasse_medico || 0), 0), [filtered]);
-  const gross = useMemo(() => filtered.reduce((sum, item) => sum + (tipo === 'socio' ? Number(item.valor || 0) - Number(item.auxilio_1 || 0) - Number(item.auxilio_2 || 0) : Number(item.valor || 0)), 0), [filtered, tipo]);
-  const deductions = Math.max(0, gross - totals - (tipo === 'terceiro' ? filtered.reduce((sum, item) => sum + Number(item.saldo_controle || 0), 0) : 0));
+  const gross = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.valor || 0), 0), [filtered]);
+  const totalImpostos = useMemo(() => filtered.reduce((sum, item) => {
+    const base = Number(item.valor || 0) - Number(item.auxilio_1 || 0) - Number(item.auxilio_2 || 0);
+    return sum + base * Number(item.imposto_percentual || 0) / 100;
+  }, 0), [filtered]);
+  const outrosDescontos = useMemo(() => filtered.reduce((sum, item) => {
+    if (tipo === 'terceiro') {
+      return sum + Number(item.desconto_paciente || 0) + Number(item.desconto_cartao || 0) + Number(item.valor_glosa || 0);
+    }
+    const base = Number(item.valor || 0) - Number(item.auxilio_1 || 0) - Number(item.auxilio_2 || 0);
+    const flags = item as any;
+    const checkbox = (flags.desc_adm === false ? 0 : base * 0.01) + (flags.desc_chefe_faturamento === false ? 0 : base * 0.0075) + (flags.desc_faturista === false ? 0 : base * 0.005) + (flags.desc_autorizacao === false ? 0 : base * 0.0025);
+    return sum + Number(item.auxilio_1 || 0) + Number(item.auxilio_2 || 0) + checkbox + Number(item.outras_deducoes || 0);
+  }, 0), [filtered, tipo]);
 
   // Repasses realizados (status = pago) no período
   const repassesRealizados = useMemo(() => filtered.filter((item) => item.status_pagamento === 'pago'), [filtered]);
@@ -375,7 +386,7 @@ export function RepasseComponent({ tipo }: Props) {
 
   return <div className="space-y-6">
     <section className="hero-panel"><div><div className="eyebrow"><ReceiptText size={15} /> Financeiro médico</div><h1>{title}</h1><p>Controle financeiro dos repasses {tipo === 'socio' ? 'de cirurgias' : 'a profissionais terceiros'}.</p></div><div className="hero-actions"><label className="month-picker"><CalendarDays size={16} /><select value={month} onChange={(event) => setMonth(event.target.value)}>{months().map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>{!isReadOnly && <button className="button button-light" onClick={openNew}><Plus size={18} /> Novo lançamento</button>}{!isReadOnly && tipo === 'socio' && <button className="button button-primary" onClick={openRepasseModal}><Check size={18} /> Realizar repasse</button>}</div></section>
-    <section className="summary-grid"><div className="summary-card summary-blue"><span>{tipo === 'socio' ? 'Total da produção' : 'Valor total'}</span><strong>{money(gross)}</strong><small>{filtered.length} lançamentos no período</small><ArrowUpRight /></div><div className="summary-card summary-green"><span>{tipo === 'socio' ? 'Valor de repasse' : 'Repasse profissional'}</span><strong>{money(totals)}</strong><small>Calculado pela regra selecionada</small><Check /></div><div className="summary-card summary-amber"><span>{tipo === 'socio' ? 'Descontos' : 'Saldo da clínica'}</span><strong>{money(tipo === 'socio' ? deductions : filtered.reduce((sum, item) => sum + Number(item.saldo_controle || 0), 0))}</strong><small>{tipo === 'socio' ? '1,5%, imposto e deduções' : 'Valor recebido menos repasse'}</small><ArrowDownRight /></div></section>
+    <section className="summary-grid"><div className="summary-card summary-blue"><span>{tipo === 'socio' ? 'Total da produção' : 'Valor total'}</span><strong>{money(gross)}</strong><small>{filtered.length} lançamentos no período</small><ArrowUpRight /></div><div className="summary-card summary-amber"><span>Impostos</span><strong>{money(totalImpostos)}</strong><small>Soma do imposto calculado por lançamento</small><ArrowDownRight /></div><div className="summary-card summary-green"><span>Outros descontos</span><strong>{money(outrosDescontos)}</strong><small>Auxílios, descontos administrativos e outras deduções</small><Check /></div></section>
     <section className="filter-panel"><div className="filter-heading"><Filter size={17} /><strong>Filtrar lançamentos</strong></div><div className="filter-grid"><label className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar médico ou paciente" /></label><select value={medico} onChange={(event) => setMedico(event.target.value)}><option value="">Todos os médicos</option>{medicos.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select><select value={status} onChange={(event) => setStatus(event.target.value as 'todos' | StatusPagamento)}><option value="todos">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select></div></section>
     {error && <div className="alert-error">{error}</div>}
     {showForm && !isReadOnly && <div className="modal-overlay" onClick={() => setShowForm(false)}><div className="modal-content" onClick={(e) => e.stopPropagation()}><div className="modal-header"><div><span className="eyebrow">{editing ? 'Editar lançamento' : 'Novo lançamento'}</span><h2>{title}</h2></div><button className="icon-button" onClick={() => setShowForm(false)}><X size={18} /></button></div><form className="form-grid" onSubmit={save}>

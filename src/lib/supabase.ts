@@ -410,6 +410,14 @@ export const dbHelpers = {
   // ============================================================
   // REPASSES IMAGEM  (inalterado)
   // ============================================================
+  async getRepassesImagemAll() {
+    const { data, error } = await supabase
+      .from('repasses_imagem')
+      .select(`*, hospital:hospitais(*), medico:medicos(*)`)
+      .order('month_reference', { ascending: false });
+    return { data, error };
+  },
+
   async getRepassesImagemByMonth(month: string) {
     const { data, error } = await supabase
       .from('repasses_imagem')
@@ -535,6 +543,7 @@ export const dbHelpers = {
       data_cirurgia: r.data_procedimento,
       categoria_lancamento: 'particular',
       hospital_id: r.hospital_id ?? null,
+      valor: r.valor_bruto,
       unidade: r.unidade?.nome ?? null,
       cirurgia_id: null,
       tipo_procedimento:

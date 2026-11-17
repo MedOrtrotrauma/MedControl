@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from './Auth/AuthContext';
-import type { Cirurgia, Medico, Procedimento, Repasse } from '../types';
+import type { Cirurgia, Medico, Procedimento, Repasse, RepasseImagem } from '../types';
 
 /* ───────────── Formatadores ───────────── */
 const money = (value: number) =>
@@ -267,6 +267,7 @@ export function DashboardComponent() {
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [procedimentos, setProcedimentos] = useState<Procedimento[]>([]);
   const [cirurgias, setCirurgias] = useState<Cirurgia[]>([]);
+  const [imagem, setImagem] = useState<RepasseImagem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filtroMedico, setFiltroMedico] = useState('');
@@ -283,11 +284,12 @@ export function DashboardComponent() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [repRes, medRes, procRes, cirRes] = await Promise.all([
+      const [repRes, medRes, procRes, cirRes, imgRes] = await Promise.all([
         dbHelpers.getRepassesForReport({ tipo: 'todos' }),
         dbHelpers.getMedicos(),
         dbHelpers.getProcedimentos(),
         dbHelpers.getCirurgias(),
+        dbHelpers.getRepassesImagemAll(),
       ]);
       if (repRes.error) {
         setError('Não foi possível carregar os dados.');
@@ -296,6 +298,7 @@ export function DashboardComponent() {
         setMedicos((medRes.data as Medico[]) || []);
         setProcedimentos((procRes.data as Procedimento[]) || []);
         setCirurgias((cirRes.data as Cirurgia[]) || []);
+        setImagem((imgRes.data as RepasseImagem[]) || []);
       }
       setLoading(false);
     };
@@ -430,6 +433,36 @@ export function DashboardComponent() {
     return { rows: top, cols, matrix };
   }, [calc, byMedico, monthly.keys]);
 
+  /* ── Imagem: ranking por médico, receita mensal e volume de exames ── */
+  const imagemPorMedico = useMemo<Slice[]>(() => {
+    const map = new Map<string, { total: number; qtd: number }>();
+    imagem.forEach((r) => {
+      const nome = r.medico?.nome || 'Sem médico';
+      const cur = map.get(nome) || { total: 0, qtd: 0 };
+      cur.total += Number(r.total || 0);
+      cur.qtd += 1;
+      map.set(nome, cur);
+    });
+    return Array.from(map.entries())
+      .map(([label, v]) => ({ label, value: v.total, qtd: v.qtd } as Slice & { qtd: number }))
+      .sort((a, b) => b.value - a.value);
+  }, [imagem]);
+
+  const imagemMensal = useMemo<Slice[]>(() => {
+    const map = new Map<string, number>();
+    imagem.forEach((r) => {
+      const m = r.month_reference || '';
+      map.set(m, (map.get(m) || 0) + Number(r.total || 0));
+    });
+    return Array.from(map.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [imagem]);
+
+  const imagemResumo = useMemo(() => {
+    const total = imagem.reduce((s, r) => s + Number(r.total || 0), 0);
+    const imposto = imagem.reduce((s, r) => s + Number(r.total || 0) * Number(r.imposto_percentual || 0) / 100, 0);
+    return { total, imposto, liquido: total - imposto, exames: imagem.length };
+  }, [imagem]);
+
   /* Tabela: ordenação + paginação */
   const tableRows = useMemo(() => {
     const val: Record<SortKey, (x: typeof calc[number]) => string | number> = {
@@ -497,7 +530,7 @@ export function DashboardComponent() {
         <div>
           <div className="eyebrow"><BarChart3 size={15} /> Business Intelligence</div>
           <h1>Dashboard</h1>
-          <p>Indicadores, tendências e composição dos repasses, cirurgias e procedimentos.</p>
+          <p>Indicadores, tendências e composição dos repasses, cirurgias, procedimentos e imagem.</p>
         </div>
       </section>
 
@@ -621,6 +654,39 @@ export function DashboardComponent() {
             </div>
           </div>
 
+          <div className="dashboard-charts-grid">
+            <div className="chart-panel">
+              <div className="chart-header"><Stethoscope size={18} /><h3>Imagem — resumo do período</h3></div>
+              <div className="bi-img-resumo">
+                <div><span>Exames no período</span><strong>{imagemResumo.exames}</strong></div>
+                <div><span>Total faturado</span><strong>{money(imagemResumo.total)}</strong></div>
+                <div><span>Impostos</span><strong>{money(imagemResumo.imposto)}</strong></div>
+                <div><span>Líquido</span><strong>{money(imagemResumo.liquido)}</strong></div>
+              </div>
+            </div>
+            <div className="chart-panel">
+              <div className="chart-header"><Users size={18} /><h3>Imagem — ranking por médico</h3></div>
+              {imagemPorMedico.length > 0 ? (
+                <Ranking data={imagemPorMedico} color="#2f6690" />
+              ) : <div className="empty-state">Sem dados de imagem</div>}
+            </div>
+          </div>
+
+          <div className="dashboard-charts-grid">
+            <div className="chart-panel">
+              <div className="chart-header"><BarChart3 size={18} /><h3>Imagem — faturamento por mês</h3></div>
+              {imagemMensal.length > 0 ? (
+                <Columns data={imagemMensal.map((m) => ({ label: monthLabel(m.label), value: m.value }))} />
+              ) : <div className="empty-state">Sem dados de imagem</div>}
+            </div>
+            <div className="chart-panel">
+              <div className="chart-header"><Receipt size={18} /><h3>Imagem — quantidade de lançamentos por médico</h3></div>
+              {imagemPorMedico.length > 0 ? (
+                <Columns data={imagemPorMedico.map((m) => ({ label: m.label.split(' ')[0], value: (m as Slice & { qtd: number }).qtd }))} format={(v) => `${v}`} />
+              ) : <div className="empty-state">Sem dados de imagem</div>}
+            </div>
+          </div>
+
           <div className="table-panel">
             <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div><span className="eyebrow">Detalhamento</span><h2>Lançamentos filtrados ({filtered.length})</h2></div>
@@ -715,4 +781,8 @@ const BI_CSS = `
 .bi-delta{display:inline-flex;align-items:center;gap:4px}
 .bi-delta.up{color:#2e7d4f}.bi-delta.down{color:#b04545}
 .bi-pager{display:flex;justify-content:center;align-items:center;gap:14px;padding:12px;font-size:13px}
+.bi-img-resumo{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.bi-img-resumo>div{background:#f6f4f8;border-radius:10px;padding:14px 16px}
+.bi-img-resumo span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a7285}
+.bi-img-resumo strong{font-size:18px;color:#2b2236}
 `;
