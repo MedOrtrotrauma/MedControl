@@ -1,8 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  Plus, DollarSign, TrendingUp, Search, Trash2, FileText, Filter, X,
-  CreditCard, Banknote, Calculator,
-} from 'lucide-react';
+import { Plus, Search, Trash2, FileText, X } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from './Auth/AuthContext';
 import { MoneyInput, parseMoney } from './Ui/MoneyInput';
@@ -10,14 +7,6 @@ import type { RepasseParticular, Medico, Unidade, Procedimento } from '../types'
 
 const money = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
-
-const PAYMENT_TAX_RATES: Record<string, { label: string; rates: number[]; defaultRate: number }> = {
-  credito: { label: 'Cartão de Crédito', rates: [3.5, 4, 4.5, 5], defaultRate: 4 },
-  debito: { label: 'Cartão de Débito', rates: [1.5, 2, 2.5], defaultRate: 2 },
-  pix: { label: 'PIX', rates: [0], defaultRate: 0 },
-  especie: { label: 'Dinheiro', rates: [0], defaultRate: 0 },
-  deposito: { label: 'Depósito/Transferência', rates: [0], defaultRate: 0 },
-};
 
 interface FormData {
   date: string;
@@ -28,7 +17,6 @@ interface FormData {
   procedure_description: string;
   gross_value: string;
   payment_method: string;
-  payment_tax_rate: string;
   invoice_tax_rate: string;
   medication_cost: string;
   supplies_cost: string;
@@ -38,7 +26,6 @@ interface FormData {
   is_split_payment: boolean;
   cash_amount: string;
   other_payment_method: string;
-  other_payment_tax_rate: string;
   cash_settlement_type: string;
   month_reference: string;
   valor_repasse_medico: string;
@@ -55,7 +42,6 @@ const initialForm = (month: string): FormData => ({
   procedure_description: '',
   gross_value: '',
   payment_method: 'pix',
-  payment_tax_rate: '0',
   invoice_tax_rate: '5',
   medication_cost: '0',
   supplies_cost: '0',
@@ -65,7 +51,6 @@ const initialForm = (month: string): FormData => ({
   is_split_payment: false,
   cash_amount: '',
   other_payment_method: 'pix',
-  other_payment_tax_rate: '0',
   cash_settlement_type: 'left_at_clinic',
   month_reference: month,
   valor_repasse_medico: '',
@@ -123,12 +108,6 @@ export function RepasseParticularComponent() {
   const update = (field: keyof FormData, value: string | boolean) => {
     setForm((p) => {
       const next = { ...p, [field]: value };
-      if (field === 'payment_method') {
-        next.payment_tax_rate = String(PAYMENT_TAX_RATES[value as string]?.defaultRate ?? 0);
-      }
-      if (field === 'other_payment_method') {
-        next.other_payment_tax_rate = String(PAYMENT_TAX_RATES[value as string]?.defaultRate ?? 0);
-      }
       return next;
     });
   };
@@ -139,21 +118,17 @@ export function RepasseParticularComponent() {
       form.is_split_payment &&
       parseMoney(form.cash_amount) > 0 &&
       parseMoney(form.cash_amount) < gross;
-    const effMethod = isSplit ? form.other_payment_method : form.payment_method;
-    const effRate = isSplit ? Number(form.other_payment_tax_rate) || 0 : Number(form.payment_tax_rate) || 0;
-    const paymentTaxAmount = (gross * effRate) / 100;
     const invoiceRate = Number(form.invoice_tax_rate) || 0;
     const invoiceTaxAmount = (gross * invoiceRate) / 100;
     const medCost = parseMoney(form.medication_cost);
     const supCost = parseMoney(form.supplies_cost);
     const othCost = parseMoney(form.other_costs);
-    const totalDeductions = paymentTaxAmount + invoiceTaxAmount + medCost + supCost + othCost;
+    const totalDeductions = invoiceTaxAmount + medCost + supCost + othCost;
     const netClinic = gross - totalDeductions;
     const cashAmount =
       isSplit ? parseMoney(form.cash_amount) : form.payment_method === 'especie' ? gross : 0;
     return {
-      gross, isSplit, effMethod, effRate, paymentTaxAmount, invoiceTaxAmount,
-      medCost, supCost, othCost, totalDeductions, netClinic, cashAmount,
+      gross, isSplit, invoiceTaxAmount, medCost, supCost, othCost, totalDeductions, netClinic, cashAmount,
     };
   }, [form]);
 
@@ -174,7 +149,6 @@ export function RepasseParticularComponent() {
       procedure_description: item.procedimento_descricao || '',
       gross_value: String(item.valor_bruto),
       payment_method: item.forma_pagamento,
-      payment_tax_rate: String(item.payment_tax_rate),
       invoice_tax_rate: String(item.invoice_tax_rate),
       medication_cost: String(item.medication_cost),
       supplies_cost: String(item.supplies_cost),
@@ -184,7 +158,6 @@ export function RepasseParticularComponent() {
       is_split_payment: item.is_split_payment,
       cash_amount: String(item.cash_amount),
       other_payment_method: item.other_payment_method || 'pix',
-      other_payment_tax_rate: '0',
       cash_settlement_type: 'left_at_clinic',
       month_reference: item.month_reference,
       valor_repasse_medico: String(item.valor_repasse_medico),
@@ -216,8 +189,8 @@ export function RepasseParticularComponent() {
       installments: 1,
       valor_bruto: calc.gross,
       valor_recebido: calc.gross,
-      payment_tax_rate: calc.isSplit ? Number(form.other_payment_tax_rate) : Number(form.payment_tax_rate),
-      payment_tax_amount: calc.paymentTaxAmount,
+      payment_tax_rate: 0,
+      payment_tax_amount: 0,
       invoice_tax_rate: Number(form.invoice_tax_rate),
       invoice_tax_amount: calc.invoiceTaxAmount,
       medication_cost: calc.medCost,
@@ -276,7 +249,7 @@ export function RepasseParticularComponent() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
-          <p className="text-emerald-100 text-sm">Valor Recebido</p>
+          <p className="text-emerald-100 text-sm">Valor bruto</p>
           <p className="text-2xl font-bold">{money(totalRecebido)}</p>
         </div>
         <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white shadow-lg">
@@ -381,16 +354,10 @@ export function RepasseParticularComponent() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Valor Bruto *</label>
+                <label className="block text-sm font-medium mb-1">Valor bruto *</label>
                 <MoneyInput value={form.gross_value}
                   onChange={(v) => update('gross_value', v)}
                   className="w-full p-3 border rounded-lg" required />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Taxa Cartão (%)</label>
-                <input type="number" step="0.01" value={form.payment_tax_rate}
-                  onChange={(e) => update('payment_tax_rate', e.target.value)}
-                  className="w-full p-3 border rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Imposto NF (%)</label>
@@ -417,7 +384,7 @@ export function RepasseParticularComponent() {
                   className="w-full p-3 border rounded-lg" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Valor de Repasse</label>
+                <label className="block text-sm font-medium mb-1">Valor de repasse</label>
                 <MoneyInput value={form.valor_repasse_medico}
                   onChange={(v) => update('valor_repasse_medico', v)}
                   className="w-full p-3 border rounded-lg" />

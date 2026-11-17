@@ -671,7 +671,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({
                     className="w-full p-3 border rounded-lg" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Valor (R$) *</label>
+                  <label className="block text-sm font-medium mb-1">Valor bruto *</label>
                   <MoneyInput value={formData.valor}
                     onChange={(v) => setFormData((p) => ({ ...p, valor: v }))}
                     className="w-full p-3 border rounded-lg" required />
@@ -747,7 +747,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
-              <p className="text-emerald-100 text-sm">Valor Recebido</p>
+              <p className="text-emerald-100 text-sm">Valor bruto</p>
               <p className="text-2xl font-bold">{money(particularTotal)}</p>
               <p className="text-emerald-200 text-xs mt-1">{formatSelectedMonth(selectedMonth)}</p>
             </div>
@@ -862,7 +862,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Valor Recebido *</label>
+                    <label className="block text-sm font-medium mb-1">Valor bruto *</label>
                     <MoneyInput value={particularForm.valor_bruto}
                       onChange={(v) => setParticularForm((p) => ({ ...p, valor_bruto: v }))}
                       className="w-full p-3 border rounded-lg" required />

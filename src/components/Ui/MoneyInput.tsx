@@ -80,16 +80,12 @@ export function MoneyInput({ value, onChange, id, required, placeholder, classNa
         onBlur={() => { setFocused(false); setDisplay(format(value)); }}
         onChange={(e) => handleChange(e.target.value)}
         className={className}
-        style={className ? undefined : { width: '100%', padding: '10px 12px', paddingLeft: 38, border: '1px solid #d4cde0', borderRadius: 9, fontSize: 14, color: '#2b2236', background: '#fff' }}
-      />
-    <span
         style={{
-          position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-          color: '#2e7d4f', fontSize: 12, fontWeight: 600, pointerEvents: 'none', opacity: display ? 1 : 0,
+          ...(className ? {} : { width: '100%', padding: '10px 12px', border: '1px solid #d4cde0', borderRadius: 9, fontSize: 14, color: '#2b2236', background: '#fff' }),
+          paddingLeft: 38,
+          paddingRight: 16,
         }}
-      >
-        {display ? parseMoney(display).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
-      </span>
+      />
     </div>
   );
 }
