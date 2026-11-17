@@ -7,11 +7,15 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import type { Medico, Hospital, RepasseImagem } from '../types';
+import { MoneyInput, parseMoney } from './Ui/MoneyInput';
 
 const money = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 
-const num = (v: string) => Math.max(0, Number(v.replace(',', '.')) || 0);
+const num = (v: string) => {
+  if (v.includes(',')) return Math.max(0, parseMoney(v));
+  return Math.max(0, Number(v) || 0);
+};
 
 const generateMonthOptions = () => {
   const months: { value: string; label: string }[] = [];
@@ -242,14 +246,10 @@ export const ImagemComponent: React.FC = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Total</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
+            <MoneyInput
               value={imagemTotal}
-              onChange={(e) => setImagemTotal(e.target.value)}
+              onChange={(v) => setImagemTotal(v)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="0,00"
               required
             />
           </div>

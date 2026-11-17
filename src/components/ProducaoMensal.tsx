@@ -23,6 +23,7 @@ import { ProducaoMensal, Medico, Convenio, Repasse, Unidade, Procedimento, Repas
 import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
 import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
+import { MoneyInput, parseMoney } from './Ui/MoneyInput';
 
 interface ProducaoMensalProps {
   initialTab?: 'convenios' | 'particular' | 'repasse-imagem';
@@ -166,7 +167,10 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setShowParticularForm(true);
   };
 
-  const num = (v: string) => Math.max(0, Number(v.replace(',', '.')) || 0);
+  const num = (v: string) => {
+    if (v.includes(',')) return Math.max(0, parseMoney(v));
+    return Math.max(0, Number(v) || 0);
+  };
 
   const saveParticular = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,7 +408,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         convenio_id: parseInt(formData.convenio_id),
         nome_paciente: formData.nome_paciente,
         data_consulta: formData.data_consulta,
-        valor: parseFloat(formData.valor),
+        valor: parseMoney(formData.valor),
         tipo: formData.tipo,
         month_reference: formData.month_reference
       });
@@ -969,16 +973,13 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Valor (R$) *
               </label>
-              <input
-                type="number"
-                step="0.01"
+              <MoneyInput
                 value={formData.valor}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, valor: e.target.value }))
+                onChange={(v) =>
+                  setFormData((prev) => ({ ...prev, valor: v }))
                 }
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                 required
-                placeholder="0,00"
               />
             </div>
 
@@ -1343,24 +1344,18 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Valor Recebido *</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                <MoneyInput
                   value={particularForm.valor}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, valor: e.target.value }))}
+                  onChange={(v) => setParticularForm((p) => ({ ...p, valor: v }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Valor de Repasse</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                <MoneyInput
                   value={particularForm.valor_repasse_medico}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, valor_repasse_medico: e.target.value }))}
+                  onChange={(v) => setParticularForm((p) => ({ ...p, valor_repasse_medico: v }))}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
@@ -1608,14 +1603,10 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Total</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                <MoneyInput
                   value={imagemTotal}
-                  onChange={(e) => setImagemTotal(e.target.value)}
+                  onChange={(v) => setImagemTotal(v)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="0,00"
                   required
                 />
               </div>

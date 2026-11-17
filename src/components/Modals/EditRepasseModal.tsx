@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, CreditCard, Stethoscope, Scissors, Calendar } from 'lucide-react';
 import { dbHelpers } from '../../lib/supabase';
+import { MoneyInput, parseMoney } from '../Ui/MoneyInput';
 import { Repasse, Medico, Convenio, Hospital } from '../../types';
 
 interface EditRepasseModalProps {
@@ -108,7 +109,7 @@ export const EditRepasseModal: React.FC<EditRepasseModalProps> = ({
         nome_paciente: formData.nome_paciente,
         hospital_id: parseInt(formData.hospital_id),
         data_cirurgia: formData.data_cirurgia,
-        valor: parseFloat(formData.valor),
+        valor: parseMoney(formData.valor),
         tipo: formData.tipo,
         is_particular: formData.is_particular,
         month_reference: formData.month_reference // NOVO CAMPO
@@ -303,11 +304,9 @@ export const EditRepasseModal: React.FC<EditRepasseModalProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Valor (R$)
               </label>
-              <input
-                type="number"
-                step="0.01"
+              <MoneyInput
                 value={formData.valor}
-                onChange={(e) => setFormData(prev => ({ ...prev, valor: e.target.value }))}
+                onChange={(v) => setFormData(prev => ({ ...prev, valor: v }))}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />

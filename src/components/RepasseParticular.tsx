@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from './Auth/AuthContext';
+import { MoneyInput, parseMoney } from './Ui/MoneyInput';
 import type { Repasse, Medico, Unidade, Procedimento } from '../types';
 
 const money = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
@@ -32,7 +33,6 @@ interface FormData {
   supplies_cost: string;
   other_costs: string;
   other_costs_description: string;
-  installments: string;
   observations: string;
   is_split_payment: boolean;
   cash_amount: string;
@@ -56,7 +56,6 @@ const initialForm = (month: string): FormData => ({
   supplies_cost: '0',
   other_costs: '0',
   other_costs_description: '',
-  installments: '1',
   observations: '',
   is_split_payment: false,
   cash_amount: '',
@@ -139,19 +138,19 @@ export function RepasseParticularComponent() {
   };
 
   const calc = useMemo(() => {
-    const gross = Number(form.gross_value) || 0;
-    const isSplit = form.is_split_payment && Number(form.cash_amount) > 0 && Number(form.cash_amount) < gross;
+    const gross = parseMoney(form.gross_value);
+    const isSplit = form.is_split_payment && parseMoney(form.cash_amount) > 0 && parseMoney(form.cash_amount) < gross;
     const effectiveMethod = isSplit ? form.other_payment_method : form.payment_method;
     const effectiveTaxRate = isSplit ? Number(form.other_payment_tax_rate) || 0 : Number(form.payment_tax_rate) || 0;
     const paymentTaxAmount = (gross * effectiveTaxRate) / 100;
     const invoiceTaxRate = Number(form.invoice_tax_rate) || 0;
     const invoiceTaxAmount = (gross * invoiceTaxRate) / 100;
-    const medCost = Number(form.medication_cost) || 0;
-    const supCost = Number(form.supplies_cost) || 0;
-    const othCost = Number(form.other_costs) || 0;
+    const medCost = parseMoney(form.medication_cost);
+    const supCost = parseMoney(form.supplies_cost);
+    const othCost = parseMoney(form.other_costs);
     const totalDeductions = paymentTaxAmount + invoiceTaxAmount + medCost + supCost + othCost;
     const netClinic = gross - totalDeductions;
-    const cashAmount = isSplit ? Number(form.cash_amount) : (form.payment_method === 'especie' ? gross : 0);
+    const cashAmount = isSplit ? parseMoney(form.cash_amount) : (form.payment_method === 'especie' ? gross : 0);
     return { gross, isSplit, effectiveMethod, effectiveTaxRate, paymentTaxAmount, invoiceTaxAmount, medCost, supCost, othCost, totalDeductions, netClinic, cashAmount };
   }, [form]);
 
@@ -177,7 +176,6 @@ export function RepasseParticularComponent() {
       supplies_cost: String(item.supplies_cost || 0),
       other_costs: String(item.other_costs || 0),
       other_costs_description: item.other_costs_description || '',
-      installments: String(item.installments || 1),
       observations: item.observacao || '',
       is_split_payment: item.is_split_payment || false,
       cash_amount: String(item.cash_amount || 0),
@@ -196,7 +194,7 @@ export function RepasseParticularComponent() {
       return;
     }
     setLoading(true);
-    const gross = Number(form.gross_value) || 0;
+    const gross = parseMoney(form.gross_value);
 
     const payload = {
       medico_id: Number(form.medico_id),
@@ -240,7 +238,6 @@ export function RepasseParticularComponent() {
       total_deductions: calc.totalDeductions,
       net_clinic_value: calc.netClinic,
       cash_settlement_type: (form.payment_method === 'especie' || calc.isSplit) ? form.cash_settlement_type : null,
-      installments: Number(form.installments) || 1,
       has_medication: calc.medCost > 0,
       has_other_costs: calc.othCost > 0,
     };
@@ -475,8 +472,8 @@ export function RepasseParticularComponent() {
                   </select>
                 </div>
                 <div className="rp-field">
-                  <label>Valor bruto (R$) *</label>
-                  <input type="number" min="0" step="0.01" value={form.gross_value} onChange={(e) => update('gross_value', e.target.value)} required placeholder="0,00" />
+                  <label>Valor bruto *</label>
+                  <MoneyInput value={form.gross_value} onChange={(v) => update('gross_value', v)} required />
                 </div>
               </div>
 
@@ -504,7 +501,7 @@ export function RepasseParticularComponent() {
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Banknote size={16} style={{ color: '#2e7d4f' }} /> Valor em dinheiro *
                       </label>
-                      <input type="number" min="0" step="0.01" value={form.cash_amount} onChange={(e) => update('cash_amount', e.target.value)} placeholder="0,00" required={form.is_split_payment} />
+                      <MoneyInput value={form.cash_amount} onChange={(v) => update('cash_amount', v)} required={form.is_split_payment} />
                       <p style={{ fontSize: 11, color: '#9a93a6', margin: '4px 0 0' }}>Adiantamento ao médico no ato</p>
                     </div>
                     <div className="rp-field">
@@ -544,12 +541,6 @@ export function RepasseParticularComponent() {
                 )}
 
                 <div className="rp-field">
-                  <label>Parcelas</label>
-                  <select value={form.installments} onChange={(e) => update('installments', e.target.value)}>
-                    {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => <option key={n} value={n}>{n}x</option>)}
-                  </select>
-                </div>
-                <div className="rp-field">
                   <label>Alíquota de imposto (ISS, etc) %</label>
                   <input type="number" min="0" step="0.01" value={form.invoice_tax_rate} onChange={(e) => update('invoice_tax_rate', e.target.value)} placeholder="Ex: 5" />
                 </div>
@@ -580,15 +571,15 @@ export function RepasseParticularComponent() {
                 <div className="rp-form-grid">
                   <div className="rp-field">
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Pill size={16} style={{ color: '#4a6bae' }} /> Medicação</label>
-                    <input type="number" min="0" step="0.01" value={form.medication_cost} onChange={(e) => update('medication_cost', e.target.value)} placeholder="0,00" />
+                    <MoneyInput value={form.medication_cost} onChange={(v) => update('medication_cost', v)} />
                   </div>
                   <div className="rp-field">
                     <label>Insumos</label>
-                    <input type="number" min="0" step="0.01" value={form.supplies_cost} onChange={(e) => update('supplies_cost', e.target.value)} placeholder="0,00" />
+                    <MoneyInput value={form.supplies_cost} onChange={(v) => update('supplies_cost', v)} />
                   </div>
                   <div className="rp-field">
                     <label>Outros custos</label>
-                    <input type="number" min="0" step="0.01" value={form.other_costs} onChange={(e) => update('other_costs', e.target.value)} placeholder="0,00" />
+                    <MoneyInput value={form.other_costs} onChange={(v) => update('other_costs', v)} />
                   </div>
                   <div className="rp-field">
                     <label>Descrição outros custos</label>
