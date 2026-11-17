@@ -19,7 +19,7 @@ export function RelatoriosComponent() {
 
   const [paciente, setPaciente] = useState('');
   const [medicoId, setMedicoId] = useState('');
-  const [unidadeNome, setUnidadeNome] = useState('');
+  const [unidadeId, setUnidadeId] = useState('');
   const [hospitalId, setHospitalId] = useState('');
   const [procedimentoNome, setProcedimentoNome] = useState('');
   const [dataInicio, setDataInicio] = useState('');
@@ -29,7 +29,7 @@ export function RelatoriosComponent() {
   const load = async () => {
     setLoading(true);
     const [repRes, medRes, hospRes, uniRes, procRes] = await Promise.all([
-      dbHelpers.getRepassesForReport({ paciente, medico: medicoId, hospital: hospitalId, unidade: unidadeNome, procedimento: procedimentoNome, dataInicio, dataFim, tipo }),
+      dbHelpers.getRepassesForReport({ paciente, medico: medicoId, hospital: hospitalId, unidade: unidadeId, procedimento: procedimentoNome, dataInicio, dataFim, tipo }),
       dbHelpers.getMedicos(),
       dbHelpers.getHospitais(),
       dbHelpers.getUnidades(),
@@ -44,7 +44,7 @@ export function RelatoriosComponent() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(); }, [paciente, medicoId, unidadeNome, hospitalId, procedimentoNome, dataInicio, dataFim, tipo]);
+  useEffect(() => { void load(); }, [paciente, medicoId, unidadeId, hospitalId, procedimentoNome, dataInicio, dataFim, tipo]);
 
   const totals = useMemo(() => ({
     terceiros: items.filter(i => i.destinatario_tipo === 'terceiro').reduce((s, i) => s + Number(i.valor_terceiro || i.valor_liquido || 0), 0),
@@ -102,7 +102,7 @@ export function RelatoriosComponent() {
   };
 
   const limpar = () => {
-    setPaciente(''); setMedicoId(''); setUnidadeNome(''); setHospitalId(''); setProcedimentoNome(''); setDataInicio(''); setDataFim(''); setTipo('todos');
+    setPaciente(''); setMedicoId(''); setUnidadeId(''); setHospitalId(''); setProcedimentoNome(''); setDataInicio(''); setDataFim(''); setTipo('todos');
   };
 
   return <div className="space-y-6">
@@ -120,7 +120,7 @@ export function RelatoriosComponent() {
         <label className="search-field"><Search size={16} /><input value={paciente} onChange={(e) => setPaciente(e.target.value)} placeholder="Nome do paciente" /></label>
         <select value={medicoId} onChange={(e) => setMedicoId(e.target.value)}><option value="">Todos os médicos</option>{medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}</select>
         <select value={hospitalId} onChange={(e) => setHospitalId(e.target.value)}><option value="">Todos os hospitais</option>{hospitais.map((h) => <option key={h.id} value={h.id}>{h.nome}</option>)}</select>
-        <select value={unidadeNome} onChange={(e) => setUnidadeNome(e.target.value)}><option value="">Todas as unidades</option>{unidades.map((u) => <option key={u.id} value={u.nome}>{u.nome}</option>)}</select>
+        <select value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)}><option value="">Todas as unidades</option>{unidades.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}</select>
         <select value={procedimentoNome} onChange={(e) => setProcedimentoNome(e.target.value)}><option value="">Todos os procedimentos</option>{procedimentos.map((p) => <option key={p.id} value={p.nome}>{p.nome}</option>)}</select>
         <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} placeholder="Data início" />
         <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} placeholder="Data fim" />

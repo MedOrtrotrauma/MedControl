@@ -535,6 +535,7 @@ export const dbHelpers = {
       data_cirurgia: r.data_procedimento,
       categoria_lancamento: 'particular',
       hospital_id: r.hospital_id ?? null,
+      unidade: r.unidade?.nome ?? null,
       cirurgia_id: null,
       tipo_procedimento:
         r.procedimento?.nome || r.procedimento_descricao || r.tipo_procedimento || null,
