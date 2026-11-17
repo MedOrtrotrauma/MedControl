@@ -17,6 +17,7 @@ import {
   UsersRound,
   X,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react';
 import { RepasseComponent } from './components/Repasse';
 import { ProducaoMensalComponent } from './components/ProducaoMensal';
@@ -33,6 +34,7 @@ import { CirurgiasCadastro } from './components/Cadastros/CirurgiasCadastro';
 import { UsuariosCadastro } from './components/Cadastros/UsuariosCadastro';
 import { AuthProvider, useAuth } from './components/Auth/AuthContext';
 import { LoginForm } from './components/Auth/LoginForm';
+import { FinanceiroComponent } from './components/Financeiro';
 import type { TipoUsuario } from './components/Auth/AuthContext';
 
 type Page = 'dashboard' | 'repasse_socios' | 'repasse_particulares' | 'imagem' | 'particulares' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
@@ -93,6 +95,7 @@ const pageTitles: Record<Page, string> = {
 function AppContent() {
   const { user, perfil, loading, signOut } = useAuth();
   const [page, setPage] = useState<Page>('dashboard');
+  const [environment, setEnvironment] = useState<'operacional' | 'financeiro'>('operacional');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasses', 'Imagem', 'Particulares']));
@@ -108,6 +111,9 @@ function AppContent() {
   );
 
   const tipo = perfil.tipo;
+  if (environment === 'financeiro' && tipo === 'administrativo') {
+    return <FinanceiroComponent onBack={() => setEnvironment('operacional')} />;
+  }
   const visibleGroups = menuGroups.filter((g) => g.roles.includes(tipo));
   const showDashboard = tipo !== 'recepcao';
   const defaultPage: Page = showDashboard ? 'dashboard' : 'particulares';
@@ -196,7 +202,7 @@ function AppContent() {
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button>
           <div><span className="breadcrumb">Vertebrare / {pageTitles[currentPage]}</span><h2>{pageTitles[currentPage]}</h2></div>
-          <div className="topbar-actions"><span className="secure-badge"><Settings2 size={15} /> {tipo === 'administrativo' ? 'Administrador' : tipo === 'recepcao' ? 'Recepção' : 'Médico'}</span><div className="top-avatar"><UserRound size={16} /></div></div>
+          <div className="topbar-actions">{tipo === 'administrativo' && <button className="button button-light" onClick={() => setEnvironment('financeiro')}><Wallet size={16} /> Ir para Financeiro</button>}<span className="secure-badge"><Settings2 size={15} /> {tipo === 'administrativo' ? 'Administrador' : tipo === 'recepcao' ? 'Recepção' : 'Médico'}</span><div className="top-avatar"><UserRound size={16} /></div></div>
         </header>
         <div className="content-area">{renderPage()}</div>
       </main>

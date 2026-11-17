@@ -395,6 +395,7 @@ export function DashboardComponent() {
   const byCirurgia = useMemo<Slice[]>(() => {
     const map = new Map<string, number>();
     calc.forEach(({ r, c }) => {
+      if ((r as { __origem?: string }).__origem !== 'cirurgia') return;
       const nome = r.cirurgia?.nome || (r.cirurgia_id ? `Cirurgia #${r.cirurgia_id}` : 'Não informada');
       map.set(nome, (map.get(nome) || 0) + c.base);
     });
@@ -404,6 +405,7 @@ export function DashboardComponent() {
   const byProcedimento = useMemo<Slice[]>(() => {
     const map = new Map<string, number>();
     filtered.forEach((r) => {
+      if ((r as { __origem?: string }).__origem !== 'particular') return;
       const nome = r.tipo_procedimento || 'Não informado';
       map.set(nome, (map.get(nome) || 0) + 1);
     });
