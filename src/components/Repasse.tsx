@@ -176,7 +176,7 @@ export function RepasseComponent({ tipo }: Props) {
     setSaving(true); setError('');
     const payload = tipo === 'socio' ? {
       numero_atendimento: form.numero_atendimento.trim(), medico_id: Number(form.medico_id), hospital_id: Number(form.hospital_id), nome_paciente: form.nome_paciente.trim(), data_cirurgia: form.data_cirurgia,
-      valor: numberValue(form.valor), tipo: 'cirurgia', is_particular: false, tipo_procedimento_detalhado: 'cirurgia_particular',
+      valor: numberValue(form.valor), is_particular: false, tipo_procedimento_detalhado: 'cirurgia_particular',
       valor_repasse_medico: calculations.repasse, month_reference: form.month_reference, observacao: form.observacao.trim() || null,
       destinatario_tipo: tipo, auxilio_1: numberValue(form.auxilio_1), auxilio_2: numberValue(form.auxilio_2), taxa_1_5: calculations.taxa,
       imposto_percentual: numberValue(form.imposto_percentual), outras_deducoes: numberValue(form.outras_deducoes), valor_liquido: calculations.repasse,
@@ -187,7 +187,7 @@ export function RepasseComponent({ tipo }: Props) {
       data_pagamento: form.status_pagamento === 'pago' ? new Date().toISOString().slice(0, 10) : null,
     } : {
       numero_atendimento: form.numero_atendimento.trim(), medico_id: Number(form.medico_id), hospital_id: Number(form.hospital_id), nome_paciente: form.nome_paciente.trim(), data_cirurgia: form.data_cirurgia,
-      valor: numberValue(form.valor), tipo: form.tipo, is_particular: false, tipo_procedimento_detalhado: 'medico_parceiro',
+      valor: numberValue(form.valor), is_particular: false, tipo_procedimento_detalhado: 'medico_parceiro',
       tipo_procedimento: form.tipo_procedimento, quantidade: numberValue(form.quantidade), forma_pagamento: form.forma_pagamento,
       valor_unitario: form.valor_unitario === '' ? numberValue(form.valor) : numberValue(form.valor_unitario), porcentagem_repasse: numberValue(form.percentual_terceiro),
       valor_repasse_medico: calculations.repasse, month_reference: form.month_reference, observacao: form.observacao.trim() || null,
