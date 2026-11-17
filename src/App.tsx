@@ -194,6 +194,15 @@ function AppContent() {
           })}
         </nav>
         <div className="sidebar-bottom">
+          {tipo === 'administrativo' && (
+            <button
+              className={`menu-item menu-item-financeiro ${environment === 'financeiro' ? 'active' : ''} ${collapsed ? 'indented' : ''}`}
+              onClick={() => { setEnvironment('financeiro'); setSidebarOpen(false); }}
+              title={collapsed ? 'Financeiro' : undefined}
+            >
+              <Wallet size={18} />{!collapsed && <span>Financeiro</span>}
+            </button>
+          )}
           {!collapsed && <div className="account-card"><div className="avatar"><UsersRound size={16} /></div><div><strong>{perfil.nome}</strong><span>{perfil.email}</span></div></div>}
           <button className="menu-item" onClick={() => void signOut()}><LogOut size={18} />{!collapsed && <span>Sair</span>}</button>
         </div>
@@ -202,7 +211,8 @@ function AppContent() {
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button>
           <div><span className="breadcrumb">Vertebrare / {pageTitles[currentPage]}</span><h2>{pageTitles[currentPage]}</h2></div>
-          <div className="topbar-actions">{tipo === 'administrativo' && <button className="button button-light" onClick={() => setEnvironment('financeiro')}><Wallet size={16} /> Ir para Financeiro</button>}<span className="secure-badge"><Settings2 size={15} /> {tipo === 'administrativo' ? 'Administrador' : tipo === 'recepcao' ? 'Recepção' : 'Médico'}</span><div className="top-avatar"><UserRound size={16} /></div></div>
+          <div className="topbar-actions"><span className="secure-badge"><Settings2 size={15} /> {tipo === 'administrativo' ? 'Administrador' : tipo === 'recepcao' ? 'Recepção' : 'Médico'}</span><div className="top-avatar"><UserRound size={16} /></div></div>
+          <div className="topbar-avatar-mobile"><UserRound size={16} /></div>
         </header>
         <div className="content-area">{renderPage()}</div>
       </main>
