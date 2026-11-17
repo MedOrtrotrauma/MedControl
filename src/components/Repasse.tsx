@@ -198,7 +198,7 @@ export function RepasseComponent({ tipo }: Props) {
       data_pagamento: form.status_pagamento === 'pago' ? new Date().toISOString().slice(0, 10) : null,
     };
     const result = editing ? await dbHelpers.updateRepasseCirurgia(editing.id, payload) : await dbHelpers.createRepasseCirurgia(payload);
-    if (result.error) setError('Não foi possível salvar o repasse. Confira os campos.');
+    if (result.error) setError(`Não foi possível salvar o repasse: ${result.error.message ?? 'erro desconhecido'}`);
     else { setShowForm(false); await load(); }
     setSaving(false);
   };
