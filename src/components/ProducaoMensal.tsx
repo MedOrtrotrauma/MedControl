@@ -1,25 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Calendar,
-  Plus,
-  DollarSign,
-  User,
-  Building,
-  TrendingUp,
-  FileText,
-  BarChart3,
-  Stethoscope,
-  Scissors,
-  Filter,
-  ChevronDown,
-  ChevronUp,
-  Search,
-  Users,
-  Trash2
+  Calendar, Plus, DollarSign, User, Building, TrendingUp, FileText,
+  BarChart3, Stethoscope, Scissors, Filter, ChevronDown, ChevronUp,
+  Search, Users, Trash2,
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
 import { useAuth } from './Auth/AuthContext';
-import { ProducaoMensal, Medico, Convenio, Repasse, Unidade, Procedimento, RepasseImagem, Hospital } from '../types';
+import {
+  ProducaoConvenio, Medico, Convenio, RepasseParticular, Unidade,
+  Procedimento, RepasseImagem, Hospital,
+} from '../types';
 import { ProducaoReport } from './Reports/ProducaoReport';
 import { EditProducaoModal } from './Modals/EditProducaoModal';
 import { ConfirmDeleteModal } from './Modals/ConfirmDeleteModal';
@@ -30,49 +20,53 @@ interface ProducaoMensalProps {
   visibleTabs?: Array<'convenios' | 'particular' | 'repasse-imagem'>;
 }
 
-export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initialTab = 'convenios', visibleTabs }) => {
+export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({
+  initialTab = 'convenios',
+  visibleTabs,
+}) => {
   const { perfil } = useAuth();
   const isAdmin = perfil?.tipo === 'administrativo';
+
   const [activeView, setActiveView] = useState<'form' | 'report'>('form');
   const [tab, setTab] = useState<'convenios' | 'particular' | 'repasse-imagem'>(initialTab);
-  const [producoes, setProducoes] = useState<ProducaoMensal[]>([]);
+
+  // --- Convênios ---
+  const [producoes, setProducoes] = useState<ProducaoConvenio[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [editingProducao, setEditingProducao] = useState<ProducaoConvenio | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [selectedMedico, setSelectedMedico] = useState('');
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
+  const [selectedTipo, setSelectedTipo] = useState('');
+  const [filtroPaciente, setFiltroPaciente] = useState('');
+  const [filtroConvenio, setFiltroConvenio] = useState('');
+
+  // --- Cadastros ---
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [convenios, setConvenios] = useState<Convenio[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [hospitais, setHospitais] = useState<Hospital[]>([]);
   const [procedimentos, setProcedimentos] = useState<Procedimento[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [editingProducao, setEditingProducao] = useState<ProducaoMensal | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [selectedMedico, setSelectedMedico] = useState<string>('');
-  const [dataInicio, setDataInicio] = useState<string>('');
-  const [dataFim, setDataFim] = useState<string>('');
-  const [selectedTipo, setSelectedTipo] = useState<string>('');
 
-  // Filtros por paciente e convênio
-  const [filtroPaciente, setFiltroPaciente] = useState<string>('');
-  const [filtroConvenio, setFiltroConvenio] = useState<string>('');
-
-  // Mês de Referência
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().slice(0, 7); // 'YYYY-MM'
-  });
+  // --- Mês ---
+  const [selectedMonth, setSelectedMonth] = useState(() =>
+    new Date().toISOString().slice(0, 7)
+  );
   const [showMonthSelector, setShowMonthSelector] = useState(false);
 
-  // === ESTADOS PARTICULAR ===
-  const [particulares, setParticulares] = useState<Repasse[]>([]);
+  // --- Particular ---
+  const [particulares, setParticulares] = useState<RepasseParticular[]>([]);
   const [particularLoading, setParticularLoading] = useState(false);
   const [showParticularForm, setShowParticularForm] = useState(false);
-  const [editingParticular, setEditingParticular] = useState<Repasse | null>(null);
+  const [editingParticular, setEditingParticular] = useState<RepasseParticular | null>(null);
   const [particularSearch, setParticularSearch] = useState('');
   const [particularMedico, setParticularMedico] = useState('');
-  // View interna da aba particular: 'form' (lançamentos) ou 'report' (relatório)
   const [particularView, setParticularView] = useState<'form' | 'report'>('form');
 
-  // === REPASSE IMAGEM ===
+  // --- Imagem ---
   const [repassesImagem, setRepassesImagem] = useState<RepasseImagem[]>([]);
   const [repasseImagemLoading, setRepasseImagemLoading] = useState(false);
   const [imagemClinica, setImagemClinica] = useState('');
@@ -80,185 +74,293 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
   const [imagemMedico, setImagemMedico] = useState('');
   const [imagemTotal, setImagemTotal] = useState('');
   const [editingRepasseImagem, setEditingRepasseImagem] = useState<RepasseImagem | null>(null);
-  // Filtro por médico na aba imagem (separado do formulário)
   const [imagemMedicoFiltro, setImagemMedicoFiltro] = useState('');
-  // View interna da aba imagem: 'form' (lançamentos) ou 'report' (relatório)
   const [imagemView, setImagemView] = useState<'form' | 'report'>('form');
 
-  // Carregar dados quando o mês selecionado mudar
-  useEffect(() => {
-    loadData();
-    loadParticulares();
-    loadRepassesImagem();
-  }, [selectedMonth]);
+  // ============================================================
+  // Carregamento
+  // ============================================================
+  useEffect(() => { void loadData(); }, [selectedMonth]);
+  useEffect(() => { void loadParticulares(); }, [selectedMonth]);
+  useEffect(() => { void loadRepassesImagem(); }, [selectedMonth]);
 
   const loadData = async () => {
     setLoading(true);
-    try {
-      const [producaoRes, medicosRes, conveniosRes, unidadesRes, procedimentosRes, hospitaisRes] = await Promise.all([
-        dbHelpers.getProducaoMensalByMonth(selectedMonth),
-        dbHelpers.getMedicos(),
-        dbHelpers.getConvenios(),
-        dbHelpers.getUnidades(),
-        dbHelpers.getProcedimentos(),
-        dbHelpers.getHospitais()
-      ]);
+    const [prodRes, medRes, convRes, uniRes, procRes, hospRes] = await Promise.all([
+      dbHelpers.getProducaoConveniosByMonth(selectedMonth),
+      dbHelpers.getMedicos(),
+      dbHelpers.getConvenios(),
+      dbHelpers.getUnidades(),
+      dbHelpers.getProcedimentos(),
+      dbHelpers.getHospitais(),
+    ]);
+    if (prodRes.data) setProducoes(prodRes.data);
+    if (medRes.data) setMedicos(medRes.data);
+    if (convRes.data) setConvenios(convRes.data);
+    if (uniRes.data) setUnidades(uniRes.data);
+    if (procRes.data) setProcedimentos(procRes.data);
+    if (hospRes.data) setHospitais(hospRes.data);
+    setLoading(false);
+  };
 
-      if (producaoRes.data) setProducoes(producaoRes.data);
-      if (medicosRes.data) setMedicos(medicosRes.data);
-      if (conveniosRes.data) setConvenios(conveniosRes.data);
-      if (unidadesRes.data) setUnidades(unidadesRes.data);
-      if (procedimentosRes.data) setProcedimentos(procedimentosRes.data);
-      if (hospitaisRes.data) setHospitais(hospitaisRes.data);
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+  const loadParticulares = async () => {
+    setParticularLoading(true);
+    const res = await dbHelpers.getRepassesParticularesByMonth(selectedMonth);
+    if (res.data) setParticulares(res.data);
+    setParticularLoading(false);
+  };
+
+  const loadRepassesImagem = async () => {
+    setRepasseImagemLoading(true);
+    const res = await dbHelpers.getRepassesImagemByMonth(selectedMonth);
+    if (res.data) setRepassesImagem(res.data);
+    setRepasseImagemLoading(false);
+  };
+
+  // ============================================================
+  // Helpers
+  // ============================================================
+  const money = (v: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
+
+  const num = (v: string) => (v.includes(',') ? Math.max(0, parseMoney(v)) : Math.max(0, Number(v) || 0));
+
+  const generateMonthOptions = () => {
+    const months: { value: string; label: string }[] = [];
+    const today = new Date();
+    for (let i = -6; i <= 3; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const value = d.toISOString().slice(0, 7);
+      const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      months.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+    }
+    return months;
+  };
+
+  const formatSelectedMonth = (m: string) => {
+    const [y, mo] = m.split('-');
+    const d = new Date(Number(y), Number(mo) - 1, 1);
+    const s = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+
+  const formatDate = (d: string) => {
+    if (!d) return '';
+    const only = d.split('T')[0];
+    const p = only.split('-');
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
+  };
+
+  // ============================================================
+  // Convênios: form + submit
+  // ============================================================
+  const [formData, setFormData] = useState({
+    medico_id: '',
+    convenio_id: '',
+    nome_paciente: '',
+    data_atendimento: '',
+    valor: '',
+    tipo: 'consulta' as 'consulta' | 'cirurgia',
+    month_reference: selectedMonth,
+  });
+
+  useEffect(() => {
+    setFormData((prev) => ({ ...prev, month_reference: selectedMonth }));
+  }, [selectedMonth]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.medico_id || !formData.convenio_id) {
+      alert('Selecione médico e convênio.');
+      return;
+    }
+    setLoading(true);
+    const valor = parseMoney(formData.valor);
+    const result = await dbHelpers.createProducaoConvenio({
+      medico_id: Number(formData.medico_id),
+      convenio_id: Number(formData.convenio_id),
+      nome_paciente: formData.nome_paciente.trim(),
+      data_atendimento: formData.data_atendimento,
+      tipo: formData.tipo,
+      valor,
+      valor_glosa: 0,
+      valor_recebido: valor,
+      month_reference: formData.month_reference,
+      observacao: null,
+    });
+    if (result.error) {
+      alert('Erro ao salvar: ' + result.error.message);
+    } else {
+      setFormData({
+        medico_id: '', convenio_id: '', nome_paciente: '', data_atendimento: '',
+        valor: '', tipo: 'consulta', month_reference: selectedMonth,
+      });
+      setShowForm(false);
+      await loadData();
     }
     setLoading(false);
   };
 
-  // === PARTICULAR: carregar, salvar, excluir ===
-  const loadParticulares = async () => {
-    setParticularLoading(true);
-    try {
-      const res = await dbHelpers.getRepassesParticularByMonth(selectedMonth);
-      if (res.data) setParticulares((res.data as Repasse[]).filter((r) => r.repasse_particular === true));
-    } catch (error) {
-      console.error('Erro ao carregar particulares:', error);
-    }
-    setParticularLoading(false);
+  const handleEdit = (p: ProducaoConvenio) => setEditingProducao(p);
+  const handleDelete = (id: number) => setDeletingId(id);
+  const confirmDelete = async () => {
+    if (!deletingId) return;
+    setDeleteLoading(true);
+    const r = await dbHelpers.deleteProducaoConvenio(deletingId);
+    if (!r.error) { await loadData(); setDeletingId(null); }
+    setDeleteLoading(false);
   };
 
-  const particularFormInitial = () => ({
-    unidade_id: '',
+  const filteredProducoes = producoes.filter((p) => {
+    const mMed = !selectedMedico || p.medico_id === Number(selectedMedico);
+    const mIni = !dataInicio || p.data_atendimento >= dataInicio;
+    const mFim = !dataFim || p.data_atendimento <= dataFim;
+    const mTip = !selectedTipo || p.tipo === selectedTipo;
+    const mPac = !filtroPaciente || p.nome_paciente.toLowerCase().includes(filtroPaciente.toLowerCase());
+    const mConv = !filtroConvenio || p.convenio_id === Number(filtroConvenio);
+    return mMed && mIni && mFim && mTip && mPac && mConv;
+  });
+
+  const totalPeriodo = filteredProducoes.reduce((s, i) => s + Number(i.valor || 0), 0);
+  const cincoPorCento = totalPeriodo * 0.05;
+
+  const limparFiltros = () => {
+    setSelectedMedico(''); setDataInicio(''); setDataFim('');
+    setSelectedTipo(''); setFiltroPaciente(''); setFiltroConvenio('');
+  };
+  const hasFilters = selectedMedico || dataInicio || dataFim || selectedTipo || filtroPaciente || filtroConvenio;
+
+  // ============================================================
+  // Particular: form + submit
+  // ============================================================
+  const particularInitial = () => ({
     medico_id: '',
+    unidade_id: '',
     nome_paciente: '',
-    data_cirurgia: '',
+    data_procedimento: '',
+    procedimento_id: '',
+    procedimento_descricao: '',
     destinatario_tipo: 'socio' as 'socio' | 'terceiro',
-    tipo_procedimento: '',
-    forma_pagamento: 'pix' as 'pix' | 'credito' | 'debito' | 'especie',
-    valor: '',
+    forma_pagamento: 'pix' as 'pix' | 'credito' | 'debito' | 'especie' | 'deposito',
+    valor_bruto: '',
     valor_repasse_medico: '',
     check_conferencia: false,
     month_reference: selectedMonth,
   });
-  const [particularForm, setParticularForm] = useState(particularFormInitial());
+  const [particularForm, setParticularForm] = useState(particularInitial());
 
   const openParticularNew = () => {
     setEditingParticular(null);
-    setParticularForm(particularFormInitial());
+    setParticularForm(particularInitial());
     setShowParticularForm(true);
   };
 
-  const openParticularEdit = (item: Repasse) => {
+  const openParticularEdit = (item: RepasseParticular) => {
     setEditingParticular(item);
     setParticularForm({
-      unidade_id: item.unidade_id ? String(item.unidade_id) : '',
       medico_id: String(item.medico_id),
+      unidade_id: item.unidade_id ? String(item.unidade_id) : '',
       nome_paciente: item.nome_paciente,
-      data_cirurgia: item.data_cirurgia,
-      destinatario_tipo: (item.destinatario_tipo || 'socio') as 'socio' | 'terceiro',
-      tipo_procedimento: item.tipo_procedimento || '',
-      forma_pagamento: (item.forma_pagamento || 'pix') as 'pix' | 'credito' | 'debito' | 'especie',
-      valor: String(item.valor || 0),
-      valor_repasse_medico: String(item.valor_repasse_medico || 0),
-      check_conferencia: item.check_conferencia || false,
-      month_reference: item.month_reference || selectedMonth,
+      data_procedimento: item.data_procedimento,
+      procedimento_id: item.procedimento_id ? String(item.procedimento_id) : '',
+      procedimento_descricao: item.procedimento_descricao || '',
+      destinatario_tipo: item.destinatario_tipo,
+      forma_pagamento: item.forma_pagamento,
+      valor_bruto: String(item.valor_bruto ?? ''),
+      valor_repasse_medico: String(item.valor_repasse_medico ?? ''),
+      check_conferencia: item.check_conferencia,
+      month_reference: item.month_reference,
     });
     setShowParticularForm(true);
   };
 
-  const num = (v: string) => {
-    if (v.includes(',')) return Math.max(0, parseMoney(v));
-    return Math.max(0, Number(v) || 0);
-  };
-
   const saveParticular = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!particularForm.medico_id || !particularForm.nome_paciente || !particularForm.data_cirurgia) {
-      alert('Preencha os campos obrigatórios: médico, paciente e data.');
+    if (!particularForm.medico_id || !particularForm.nome_paciente || !particularForm.data_procedimento) {
+      alert('Preencha médico, paciente e data.');
       return;
     }
     setParticularLoading(true);
-    const valor = num(particularForm.valor);
+    const valorBruto = num(particularForm.valor_bruto);
     const valorRepasse = num(particularForm.valor_repasse_medico);
 
     const payload = {
       medico_id: Number(particularForm.medico_id),
-      hospital_id: null,
-      nome_paciente: particularForm.nome_paciente.trim(),
-      data_cirurgia: particularForm.data_cirurgia,
-      tipo: 'consulta' as const,
-      is_particular: true,
-      repasse_particular: true,
-      tipo_procedimento_detalhado: 'cirurgia_particular' as const,
-      tipo_procedimento: particularForm.tipo_procedimento.trim() || null,
-      forma_pagamento: particularForm.forma_pagamento,
-      quantidade: 1,
-      valor: valor,
-      valor_repasse_medico: valorRepasse,
       unidade_id: particularForm.unidade_id ? Number(particularForm.unidade_id) : null,
-      desconto_paciente: 0,
-      desconto_cartao: 0,
-      valor_glosa: 0,
-      valor_recebido: valor,
+      nome_paciente: particularForm.nome_paciente.trim(),
+      data_procedimento: particularForm.data_procedimento,
+      procedimento_id: particularForm.procedimento_id ? Number(particularForm.procedimento_id) : null,
+      procedimento_descricao: particularForm.procedimento_descricao || null,
       destinatario_tipo: particularForm.destinatario_tipo,
-      auxilio_1: 0,
-      auxilio_2: 0,
-      taxa_1_5: 0,
-      imposto_percentual: 0,
-      outras_deducoes: 0,
-      valor_liquido: valor,
-      percentual_terceiro: 0,
-      valor_terceiro: 0,
-      saldo_controle: 0,
-      month_reference: particularForm.month_reference,
-      observacao: null,
+      forma_pagamento: particularForm.forma_pagamento,
+      is_split_payment: false,
+      cash_amount: 0,
+      other_payment_method: null,
+      installments: 1,
+      valor_bruto: valorBruto,
+      valor_recebido: valorBruto,
+      payment_tax_rate: 0, payment_tax_amount: 0,
+      invoice_tax_rate: 0, invoice_tax_amount: 0,
+      medication_cost: 0, supplies_cost: 0, other_costs: 0, other_costs_description: null,
+      total_deductions: 0,
+      valor_liquido: valorBruto,
+      valor_repasse_medico: valorRepasse,
+      check_conferencia: particularForm.check_conferencia,
       status_pagamento: 'pendente' as const,
       data_pagamento: null,
-      check_conferencia: particularForm.check_conferencia,
+      month_reference: particularForm.month_reference,
+      observacao: null,
     };
 
     const result = editingParticular
-      ? await dbHelpers.updateRepasse(editingParticular.id, payload)
-      : await dbHelpers.createRepasse(payload);
+      ? await dbHelpers.updateRepasseParticular(editingParticular.id, payload)
+      : await dbHelpers.createRepasseParticular(payload);
 
-    if (result.error) {
-      alert('Erro ao salvar: ' + result.error.message);
-    } else {
-      setShowParticularForm(false);
-      await loadParticulares();
-    }
+    if (result.error) alert('Erro: ' + result.error.message);
+    else { setShowParticularForm(false); await loadParticulares(); }
     setParticularLoading(false);
   };
 
   const deleteParticular = async (id: number) => {
     if (!window.confirm('Excluir este lançamento particular?')) return;
-    const result = await dbHelpers.deleteRepasse(id);
-    if (result.error) {
-      alert('Erro ao excluir: ' + result.error.message);
-    } else {
-      await loadParticulares();
-    }
+    const r = await dbHelpers.deleteRepasseParticular(id);
+    if (r.error) alert('Erro: ' + r.error.message);
+    else await loadParticulares();
   };
 
-  const loadRepassesImagem = async () => {
-    setRepasseImagemLoading(true);
-    try {
-      const result = await dbHelpers.getRepassesImagemByMonth(selectedMonth);
-      if (result.data) setRepassesImagem(result.data as RepasseImagem[]);
-    } catch (error) {
-      console.error('Erro ao carregar repasses imagem:', error);
-    }
-    setRepasseImagemLoading(false);
-  };
+  const filteredParticulares = particulares.filter((i) => {
+    const t = `${i.nome_paciente} ${i.medico?.nome || ''}`.toLowerCase();
+    return t.includes(particularSearch.toLowerCase()) &&
+      (!particularMedico || String(i.medico_id) === particularMedico);
+  });
+  const particularTotal = filteredParticulares.reduce((s, i) => s + Number(i.valor_bruto || 0), 0);
+  const particularRepasse = filteredParticulares.reduce((s, i) => s + Number(i.valor_repasse_medico || 0), 0);
 
-  const resetRepasseImagemForm = () => {
+  // ============================================================
+  // Imagem: form + submit (inalterado conceitualmente)
+  // ============================================================
+  const imagemRowsFiltradas = repassesImagem.filter((i) => {
+    const mCli = !imagemClinica || String(i.hospital_id) === imagemClinica;
+    const mMed = !imagemMedicoFiltro || String(i.medico_id) === imagemMedicoFiltro;
+    return mCli && mMed;
+  });
+
+  const kpisImagem = (() => {
+    const total = imagemRowsFiltradas.reduce((s, i) => s + Number(i.total || 0), 0);
+    const imposto = imagemRowsFiltradas.reduce(
+      (s, i) => s + (Number(i.total || 0) * Number(i.imposto_percentual || 0)) / 100, 0
+    );
+    const sem = total - imposto;
+    return { total, imposto, sem, casa: sem / 2, medico: sem / 2 };
+  })();
+
+  const resetImagemForm = () => {
     setEditingRepasseImagem(null);
     setImagemMedico('');
     setImagemTotal('');
   };
 
-  const openRepasseImagemEdit = (item: RepasseImagem) => {
+  const openImagemEdit = (item: RepasseImagem) => {
     setEditingRepasseImagem(item);
     setImagemClinica(String(item.hospital_id));
     setImagemMedico(String(item.medico_id));
@@ -266,15 +368,14 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
     setImagemImposto(String(item.imposto_percentual));
   };
 
-  const saveRepasseImagem = async (e: React.FormEvent) => {
+  const saveImagem = async (e: React.FormEvent) => {
     e.preventDefault();
     const total = num(imagemTotal);
     const imposto = num(imagemImposto);
     if (!imagemClinica || !imagemMedico || total <= 0) {
-      alert('Selecione a clínica, o médico e informe um total maior que zero.');
+      alert('Selecione clínica, médico e total > 0.');
       return;
     }
-
     setRepasseImagemLoading(true);
     const payload = {
       month_reference: selectedMonth,
@@ -283,267 +384,53 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
       total,
       imposto_percentual: imposto,
     };
-    const result = editingRepasseImagem
+    const r = editingRepasseImagem
       ? await dbHelpers.updateRepasseImagem(editingRepasseImagem.id, payload)
       : await dbHelpers.createRepasseImagem(payload);
-
-    if (result.error) {
-      alert('Erro ao salvar: ' + result.error.message);
-    } else {
-      resetRepasseImagemForm();
-      await loadRepassesImagem();
-    }
+    if (r.error) alert('Erro: ' + r.error.message);
+    else { resetImagemForm(); await loadRepassesImagem(); }
     setRepasseImagemLoading(false);
   };
 
-  const deleteRepasseImagem = async (id: number) => {
-    if (!window.confirm('Excluir este lançamento de repasse imagem?')) return;
+  const deleteImagem = async (id: number) => {
+    if (!window.confirm('Excluir este lançamento?')) return;
     setRepasseImagemLoading(true);
-    const result = await dbHelpers.deleteRepasseImagem(id);
-    if (result.error) alert('Erro ao excluir: ' + result.error.message);
+    const r = await dbHelpers.deleteRepasseImagem(id);
+    if (r.error) alert('Erro: ' + r.error.message);
     await loadRepassesImagem();
     setRepasseImagemLoading(false);
   };
 
-  const filteredParticulares = particulares.filter((item) => {
-    const text = `${item.nome_paciente} ${item.medico?.nome || ''}`.toLowerCase();
-    return text.includes(particularSearch.toLowerCase()) && (!particularMedico || String(item.medico_id) === particularMedico);
-  });
-
-  const particularTotal = filteredParticulares.reduce((sum, item) => sum + Number(item.valor || 0), 0);
-  const particularRepasse = filteredParticulares.reduce((sum, item) => sum + Number(item.valor_repasse_medico || 0), 0);
-  const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
-
-  // === REPASSE IMAGEM: filtros e cálculos ===
-  // Linhas filtradas por clínica E por médico (filtro de médico aplicado na aba)
-  const imagemRowsFiltradas = repassesImagem.filter((item) => {
-    const matchClinica = !imagemClinica || String(item.hospital_id) === imagemClinica;
-    const matchMedico = !imagemMedicoFiltro || String(item.medico_id) === imagemMedicoFiltro;
-    return matchClinica && matchMedico;
-  });
-
-  // KPIs de imagem (baseados no form do contexto: total + imposto_percentual por linha)
-  const calcularKpisImagem = (rows: RepasseImagem[]) => {
-    const totalRecebido = rows.reduce((sum, item) => sum + Number(item.total || 0), 0);
-    const totalImposto = rows.reduce(
-      (sum, item) => sum + (Number(item.total || 0) * Number(item.imposto_percentual || 0)) / 100,
-      0
-    );
-    const semImposto = totalRecebido - totalImposto;
-    const ficouNaCasa = semImposto / 2;
-    const foiParaMedicos = semImposto / 2;
-    return { totalRecebido, totalImposto, ficouNaCasa, foiParaMedicos, semImposto };
-  };
-
-  const kpisImagem = calcularKpisImagem(imagemRowsFiltradas);
-
-  // Função para gerar opções de meses
-  const generateMonthOptions = () => {
-    const months = [];
-    const today = new Date();
-
-    for (let i = -6; i <= 3; i++) {
-      const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-      const value = date.toISOString().slice(0, 7);
-      const label = date.toLocaleDateString('pt-BR', {
-        month: 'long',
-        year: 'numeric'
-      });
-
-      months.push({
-        value,
-        label: label.charAt(0).toUpperCase() + label.slice(1)
-      });
-    }
-
-    return months;
-  };
-
-  const formatSelectedMonth = (month: string) => {
-    const [year, monthNum] = month.split('-');
-    const date = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
-    return date.toLocaleDateString('pt-BR', {
-      month: 'long',
-      year: 'numeric'
-    });
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-
-    try {
-      const dateOnly = dateString.split('T')[0];
-      if (dateOnly.includes('-')) {
-        const parts = dateOnly.split('-');
-        if (parts.length === 3) {
-          const [year, month, day] = parts;
-          return `${day}/${month}/${year}`;
-        }
-      }
-      return dateString;
-    } catch (error) {
-      console.error('Erro ao formatar data:', error);
-      return dateString;
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.medico_id) {
-      alert('Por favor, selecione um médico');
-      return;
-    }
-
-    if (!formData.convenio_id) {
-      alert('Por favor, selecione um convênio');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const result = await dbHelpers.createProducaoMensal({
-        medico_id: parseInt(formData.medico_id),
-        convenio_id: parseInt(formData.convenio_id),
-        nome_paciente: formData.nome_paciente,
-        data_consulta: formData.data_consulta,
-        valor: parseMoney(formData.valor),
-        tipo: formData.tipo,
-        month_reference: formData.month_reference
-      });
-
-      if (result.error) {
-        console.error('Erro:', result.error);
-        alert('Erro ao salvar: ' + result.error.message);
-      } else {
-        setFormData({
-          medico_id: '',
-          convenio_id: '',
-          nome_paciente: '',
-          data_consulta: '',
-          valor: '',
-          tipo: 'consulta',
-          month_reference: selectedMonth
-        });
-        setShowForm(false);
-        loadData();
-      }
-    } catch (error) {
-      console.error('Erro ao salvar produção:', error);
-      alert('Erro ao salvar produção');
-    }
-
-    setLoading(false);
-  };
-
-  const [formData, setFormData] = useState({
-    medico_id: '',
-    convenio_id: '',
-    nome_paciente: '',
-    data_consulta: '',
-    valor: '',
-    tipo: 'consulta' as 'consulta' | 'cirurgia',
-    month_reference: selectedMonth
-  });
-
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      month_reference: selectedMonth
-    }));
-  }, [selectedMonth]);
-
-  const handleEdit = (producao: ProducaoMensal) => {
-    setEditingProducao(producao);
-  };
-
-  const handleDelete = async (id: number) => {
-    setDeletingId(id);
-  };
-
-  const confirmDelete = async () => {
-    if (!deletingId) return;
-
-    setDeleteLoading(true);
-    try {
-      const result = await dbHelpers.deleteProducaoMensal(deletingId);
-      if (!result.error) {
-        loadData();
-        setDeletingId(null);
-      }
-    } catch (error) {
-      console.error('Erro ao excluir:', error);
-    }
-    setDeleteLoading(false);
-  };
-
-  const handleNew = () => {
-    setShowForm(true);
-    setActiveView('form');
-  };
-
-  const filteredProducoes = producoes.filter(p => {
-    const matchesMedico = selectedMedico ? p.medico_id === parseInt(selectedMedico) : true;
-    const matchesDataInicio = dataInicio ? p.data_consulta >= dataInicio : true;
-    const matchesDataFim = dataFim ? p.data_consulta <= dataFim : true;
-    const matchesTipo = selectedTipo ? p.tipo === selectedTipo : true;
-    const matchesPaciente = filtroPaciente ?
-      p.nome_paciente.toLowerCase().includes(filtroPaciente.toLowerCase()) : true;
-    const matchesConvenio = filtroConvenio ?
-      p.convenio_id === parseInt(filtroConvenio) : true;
-
-    return matchesMedico && matchesDataInicio && matchesDataFim &&
-      matchesTipo && matchesPaciente && matchesConvenio;
-  });
-
-  const totalPeriodo = filteredProducoes.reduce((sum, item) => sum + item.valor, 0);
-  const totalMedicoSelecionado = filteredProducoes.reduce((sum, item) => sum + item.valor, 0);
-  const cincoPorCentoMedico = totalMedicoSelecionado * 0.05;
-
-  const limparTodosFiltros = () => {
-    setSelectedMedico('');
-    setDataInicio('');
-    setDataFim('');
-    setSelectedTipo('');
-    setFiltroPaciente('');
-    setFiltroConvenio('');
-  };
-
-  const hasActiveFilters = selectedMedico || dataInicio || dataFim || selectedTipo || filtroPaciente || filtroConvenio;
-
+  // ============================================================
+  // Views
+  // ============================================================
   if (activeView === 'report') {
     return (
       <div className="space-y-6">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveView('form')}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-          >
-            ← Voltar ao Formulário
-          </button>
-        </div>
-
+        <button
+          onClick={() => setActiveView('form')}
+          className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+        >
+          ← Voltar
+        </button>
         <ProducaoReport
           onEdit={handleEdit}
           onDelete={handleDelete}
-          onNew={handleNew}
+          onNew={() => { setShowForm(true); setActiveView('form'); }}
           selectedMonth={selectedMonth}
         />
-
         <EditProducaoModal
           producao={editingProducao}
           isOpen={!!editingProducao}
           onClose={() => setEditingProducao(null)}
           onSave={loadData}
         />
-
         <ConfirmDeleteModal
           isOpen={!!deletingId}
           onClose={() => setDeletingId(null)}
           onConfirm={confirmDelete}
           title="Excluir Produção"
-          message="Tem certeza que deseja excluir este registro de produção? Esta ação não pode ser desfeita."
+          message="Tem certeza que deseja excluir este registro?"
           loading={deleteLoading}
         />
       </div>
@@ -554,7 +441,7 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
 
   return (
     <div className="space-y-6">
-      {/* Header Section */}
+      {/* Header */}
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg bg-gradient-to-r ${showOnlyImagem ? 'from-indigo-500 to-indigo-600' : 'from-green-500 to-green-600'}`}>
@@ -564,35 +451,24 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
             <h2 className="text-2xl font-bold text-gray-900">
               {showOnlyImagem ? 'Repasse Imagem' : 'Produção Mensal'}
             </h2>
-
             <div className="relative mt-1">
               <button
                 onClick={() => setShowMonthSelector(!showMonthSelector)}
-                className="flex items-center gap-2 px-3 py-1 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-3 py-1 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 <Calendar className="h-4 w-4 text-gray-600" />
-                <span className="font-medium text-gray-700">
-                  {formatSelectedMonth(selectedMonth)}
-                </span>
+                <span className="font-medium text-gray-700">{formatSelectedMonth(selectedMonth)}</span>
                 {showMonthSelector ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
-
               {showMonthSelector && (
-                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10 w-48">
-                  {generateMonthOptions().map(month => (
+                <div className="absolute top-full left-0 mt-1 bg-white border rounded-lg shadow-lg z-10 w-48">
+                  {generateMonthOptions().map((m) => (
                     <button
-                      key={month.value}
-                      onClick={() => {
-                        setSelectedMonth(month.value);
-                        setShowMonthSelector(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors ${
-                        month.value === selectedMonth
-                          ? 'bg-blue-100 text-blue-700 font-medium'
-                          : 'text-gray-700'
-                      }`}
+                      key={m.value}
+                      onClick={() => { setSelectedMonth(m.value); setShowMonthSelector(false); }}
+                      className={`w-full text-left px-4 py-2 hover:bg-blue-50 ${m.value === selectedMonth ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-700'}`}
                     >
-                      {month.label}
+                      {m.label}
                     </button>
                   ))}
                 </div>
@@ -601,70 +477,61 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
           </div>
         </div>
 
-        {/* Ações do header: escondidas na aba imagem */}
         {!showOnlyImagem && (
           <div className="flex gap-3">
             <button
               onClick={() => {
-                if (tab === 'particular') {
-                  setParticularView(particularView === 'report' ? 'form' : 'report');
-                } else {
-                  setActiveView('report');
-                }
+                if (tab === 'particular') setParticularView(particularView === 'report' ? 'form' : 'report');
+                else setActiveView('report');
               }}
-              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 shadow-lg"
             >
               <BarChart3 size={20} />
               {tab === 'particular' && particularView === 'report' ? 'Voltar aos Lançamentos' : 'Relatório'}
             </button>
-            {/* Nova Consulta só aparece fora da aba particular */}
             {tab !== 'particular' && (
               <button
                 onClick={() => setShowForm(!showForm)}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 shadow-lg"
               >
-                <Plus size={20} />
-                Nova Consulta
+                <Plus size={20} /> Nova Consulta
               </button>
             )}
           </div>
         )}
 
         {showOnlyImagem && (
-          <div className="flex gap-3">
-            <button
-              onClick={() => setImagemView(imagemView === 'report' ? 'form' : 'report')}
-              className={`px-6 py-3 rounded-lg flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-white ${
-                imagemView === 'report'
-                  ? 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800'
-                  : 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800'
-              }`}
-            >
-              <BarChart3 size={20} />
-              {imagemView === 'report' ? 'Voltar aos Lançamentos' : 'Relatório'}
-            </button>
-          </div>
+          <button
+            onClick={() => setImagemView(imagemView === 'report' ? 'form' : 'report')}
+            className={`px-6 py-3 rounded-lg flex items-center gap-2 shadow-lg text-white ${imagemView === 'report' ? 'bg-gray-600' : 'bg-indigo-600'}`}
+          >
+            <BarChart3 size={20} />
+            {imagemView === 'report' ? 'Voltar aos Lançamentos' : 'Relatório'}
+          </button>
         )}
       </div>
 
-      {/* ABAS */}
+      {/* Abas */}
       {(() => {
         const show = visibleTabs ?? ['convenios', 'particular', 'repasse-imagem'];
         if (show.length <= 1) return null;
         return (
           <div className="flex gap-2 border-b border-gray-200">
             {show.includes('convenios') && (
-              <button onClick={() => { setTab('convenios'); setImagemView('form'); setParticularView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'convenios' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => { setTab('convenios'); setImagemView('form'); setParticularView('form'); }}
+                className={`px-6 py-3 font-medium border-b-2 -mb-px ${tab === 'convenios' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500'}`}>
                 <Building size={18} className="inline mr-2" />Convênios
               </button>
             )}
             {show.includes('particular') && (
-              <button onClick={() => { setTab('particular'); setImagemView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'particular' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => { setTab('particular'); setImagemView('form'); }}
+                className={`px-6 py-3 font-medium border-b-2 -mb-px ${tab === 'particular' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500'}`}>
                 <User size={18} className="inline mr-2" />Particular
               </button>
             )}
             {show.includes('repasse-imagem') && (
-              <button onClick={() => { setTab('repasse-imagem'); setParticularView('form'); }} className={`px-6 py-3 font-medium transition-colors border-b-2 -mb-px ${tab === 'repasse-imagem' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <button onClick={() => { setTab('repasse-imagem'); setParticularView('form'); }}
+                className={`px-6 py-3 font-medium border-b-2 -mb-px ${tab === 'repasse-imagem' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'}`}>
                 <Building size={18} className="inline mr-2" />Repasse imagem
               </button>
             )}
@@ -672,802 +539,425 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         );
       })()}
 
-      {/* === ABA CONVÊNIOS === */}
+      {/* ============ ABA CONVÊNIOS ============ */}
       {tab === 'convenios' && (
-      <>
-
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="bg-gray-100 p-2 rounded-lg">
-              <Filter className="h-5 w-5 text-gray-600" />
+        <>
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="bg-gray-100 p-2 rounded-lg"><Filter className="h-5 w-5 text-gray-600" /></div>
+              <span className="font-semibold text-gray-800">Filtros:</span>
             </div>
-            <span className="font-semibold text-gray-800">Filtros:</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
-              <select
-                value={selectedMedico}
-                onChange={(e) => setSelectedMedico(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Todos os médicos</option>
-                {medicos.map(medico => (
-                  <option key={medico.id} value={medico.id}>{medico.nome}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Convênio</label>
-              <select
-                value={filtroConvenio}
-                onChange={(e) => setFiltroConvenio(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Todos os convênios</option>
-                {convenios.map(convenio => (
-                  <option key={convenio.id} value={convenio.id}>{convenio.nome}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-              <select
-                value={selectedTipo}
-                onChange={(e) => setSelectedTipo(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Todos os tipos</option>
-                <option value="consulta">🩺 Consulta</option>
-                <option value="cirurgia">✂️ Cirurgia</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Paciente</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={filtroPaciente}
-                  onChange={(e) => setFiltroPaciente(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pl-10"
-                  placeholder="Buscar por nome..."
-                />
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                  <Search size={16} className="text-gray-400" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
+                <select value={selectedMedico} onChange={(e) => setSelectedMedico(e.target.value)}
+                  className="w-full p-3 border rounded-lg">
+                  <option value="">Todos</option>
+                  {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Convênio</label>
+                <select value={filtroConvenio} onChange={(e) => setFiltroConvenio(e.target.value)}
+                  className="w-full p-3 border rounded-lg">
+                  <option value="">Todos</option>
+                  {convenios.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+                <select value={selectedTipo} onChange={(e) => setSelectedTipo(e.target.value)}
+                  className="w-full p-3 border rounded-lg">
+                  <option value="">Todos</option>
+                  <option value="consulta">Consulta</option>
+                  <option value="cirurgia">Cirurgia</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Paciente</label>
+                <div className="relative">
+                  <input type="text" value={filtroPaciente} onChange={(e) => setFiltroPaciente(e.target.value)}
+                    className="w-full p-3 border rounded-lg pl-10" placeholder="Buscar..." />
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data Início</label>
+                <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)}
+                  className="w-full p-3 border rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data Fim</label>
+                <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)}
+                  className="w-full p-3 border rounded-lg" />
+              </div>
             </div>
+            {hasFilters && (
+              <button onClick={limparFiltros}
+                className="mt-4 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                Limpar Filtros
+              </button>
+            )}
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Data Início</label>
-              <input
-                type="date"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+              <p className="text-green-100 text-sm">Total do Mês</p>
+              <p className="text-2xl font-bold">R$ {totalPeriodo.toFixed(2)}</p>
+              <p className="text-green-200 text-xs mt-1">{formatSelectedMonth(selectedMonth)}</p>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Data Fim</label>
-              <input
-                type="date"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+              <p className="text-blue-100 text-sm">Total de Consultas</p>
+              <p className="text-2xl font-bold">{filteredProducoes.length}</p>
+            </div>
+            <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
+              <p className="text-purple-100 text-sm">5% do Total</p>
+              <p className="text-2xl font-bold">R$ {cincoPorCento.toFixed(2)}</p>
             </div>
           </div>
 
-          {hasActiveFilters && (
-            <div className="flex gap-2">
-              <button
-                onClick={limparTodosFiltros}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-              >
-                Limpar Todos os Filtros
-              </button>
+          {showForm && (
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+              <div className="flex items-center gap-2 mb-6">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <h3 className="text-lg font-semibold">Nova Consulta</h3>
+              </div>
+              <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Mês de Referência *</label>
+                  <select value={formData.month_reference}
+                    onChange={(e) => setFormData((p) => ({ ...p, month_reference: e.target.value }))}
+                    className="w-full p-3 border rounded-lg" required>
+                    {generateMonthOptions().map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Médico *</label>
+                  <select value={formData.medico_id}
+                    onChange={(e) => setFormData((p) => ({ ...p, medico_id: e.target.value }))}
+                    className="w-full p-3 border rounded-lg" required>
+                    <option value="">Selecione</option>
+                    {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Convênio *</label>
+                  <select value={formData.convenio_id}
+                    onChange={(e) => setFormData((p) => ({ ...p, convenio_id: e.target.value }))}
+                    className="w-full p-3 border rounded-lg" required>
+                    <option value="">Selecione</option>
+                    {convenios.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Tipo *</label>
+                  <select value={formData.tipo}
+                    onChange={(e) => setFormData((p) => ({ ...p, tipo: e.target.value as 'consulta' | 'cirurgia' }))}
+                    className="w-full p-3 border rounded-lg" required>
+                    <option value="consulta">Consulta</option>
+                    <option value="cirurgia">Cirurgia</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Paciente *</label>
+                  <input type="text" value={formData.nome_paciente}
+                    onChange={(e) => setFormData((p) => ({ ...p, nome_paciente: e.target.value }))}
+                    className="w-full p-3 border rounded-lg" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Data do Atendimento *</label>
+                  <input type="date" value={formData.data_atendimento}
+                    onChange={(e) => setFormData((p) => ({ ...p, data_atendimento: e.target.value }))}
+                    className="w-full p-3 border rounded-lg" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Valor (R$) *</label>
+                  <MoneyInput value={formData.valor}
+                    onChange={(v) => setFormData((p) => ({ ...p, valor: v }))}
+                    className="w-full p-3 border rounded-lg" required />
+                </div>
+                <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+                  <button type="button" onClick={() => setShowForm(false)}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                  <button type="submit" disabled={loading}
+                    className="bg-green-600 text-white px-6 py-3 rounded-lg disabled:opacity-50">
+                    {loading ? 'Salvando...' : 'Salvar Consulta'}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-100 text-sm font-medium">
-                {selectedMedico ? 'Total do Médico' : 'Total do Mês'}
-              </p>
-              <p className="text-2xl font-bold">
-                R$ {selectedMedico ? totalMedicoSelecionado.toFixed(2) : totalPeriodo.toFixed(2)}
-              </p>
-              <p className="text-green-200 text-xs mt-1">
-                {formatSelectedMonth(selectedMonth)}
-              </p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg">
-              <DollarSign className="h-6 w-6" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 text-sm font-medium">Total de Consultas</p>
-              <p className="text-2xl font-bold">{filteredProducoes.length}</p>
-              <p className="text-blue-200 text-xs mt-1">
-                {formatSelectedMonth(selectedMonth)}
-              </p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg">
-              <FileText className="h-6 w-6" />
-            </div>
-          </div>
-        </div>
-
-        {selectedMedico && (
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm font-medium">5% do Total</p>
-                <p className="text-2xl font-bold">R$ {cincoPorCentoMedico.toFixed(2)}</p>
-                <p className="text-purple-200 text-xs mt-1">
-                  {formatSelectedMonth(selectedMonth)}
-                </p>
+          {!showForm && (
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-x-auto">
+              <div className="p-6 border-b">
+                <h4 className="text-lg font-semibold">
+                  Produções de {formatSelectedMonth(selectedMonth)} — {filteredProducoes.length} registro(s)
+                </h4>
               </div>
-              <div className="bg-white/20 p-3 rounded-lg">
-                <TrendingUp className="h-6 w-6" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!selectedMedico && (
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm font-medium">Média por Consulta</p>
-                <p className="text-2xl font-bold">R$ {filteredProducoes.length > 0 ? (totalPeriodo / filteredProducoes.length).toFixed(2) : '0.00'}</p>
-                <p className="text-purple-200 text-xs mt-1">
-                  {formatSelectedMonth(selectedMonth)}
-                </p>
-              </div>
-              <div className="bg-white/20 p-3 rounded-lg">
-                <TrendingUp className="h-6 w-6" />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Formulário de Nova Consulta */}
-      {showForm && (
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-          <div className="flex items-center gap-2 mb-6">
-            <FileText className="h-5 w-5 text-blue-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Nova Consulta</h3>
-          </div>
-          <form
-            onSubmit={handleSubmit}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          >
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mês de Referência *
-              </label>
-              <select
-                value={formData.month_reference}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, month_reference: e.target.value }))
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              >
-                {generateMonthOptions().map(month => (
-                  <option key={month.value} value={month.value}>
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Médico *
-              </label>
-              <select
-                value={formData.medico_id}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, medico_id: e.target.value }))
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              >
-                <option value="">Selecione o médico</option>
-                {medicos.map((medico) => (
-                  <option key={medico.id} value={medico.id}>
-                    {medico.nome} {medico.crm && `- CRM: ${medico.crm}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Convênio *
-              </label>
-              <select
-                value={formData.convenio_id}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, convenio_id: e.target.value }))
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              >
-                <option value="">Selecione o convênio</option>
-                {convenios.map((convenio) => (
-                  <option key={convenio.id} value={convenio.id}>
-                    {convenio.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tipo de Atendimento *
-              </label>
-              <select
-                value={formData.tipo}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, tipo: e.target.value as 'consulta' | 'cirurgia' }))
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              >
-                <option value="consulta">🩺 Consulta</option>
-                <option value="cirurgia">✂️ Cirurgia</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nome do Paciente *
-              </label>
-              <input
-                type="text"
-                value={formData.nome_paciente}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, nome_paciente: e.target.value }))
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-                placeholder="Nome completo do paciente"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Data do Atendimento *
-              </label>
-              <input
-                type="date"
-                value={formData.data_consulta}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, data_consulta: e.target.value }))
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Valor (R$) *
-              </label>
-              <MoneyInput
-                value={formData.valor}
-                onChange={(v) =>
-                  setFormData((prev) => ({ ...prev, valor: v }))
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                required
-              />
-            </div>
-
-            <div className="md:col-span-2 flex justify-end gap-3 mt-4">
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Salvando...
-                  </>
-                ) : (
-                  <>
-                    <Plus size={16} />
-                    Salvar Consulta
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Lista de Produções */}
-      {!showForm && (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-gray-900">
-                Produções de {formatSelectedMonth(selectedMonth)}
-                {selectedMedico && ` - ${medicos.find(m => m.id === parseInt(selectedMedico))?.nome}`}
-                {filtroConvenio && ` - ${convenios.find(c => c.id === parseInt(filtroConvenio))?.nome}`}
-                {selectedTipo && ` - ${selectedTipo === 'consulta' ? 'Consultas' : 'Cirurgias'}`}
-                {filtroPaciente && ` - Paciente: ${filtroPaciente}`}
-              </h4>
-              <div className="text-sm text-gray-500">
-                {filteredProducoes.length} registro{filteredProducoes.length !== 1 ? 's' : ''} encontrado{filteredProducoes.length !== 1 ? 's' : ''}
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Médico</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Convênio</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Tipo</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Paciente</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Data</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Valor</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {loading ? (
+              <table className="w-full">
+                <thead className="bg-gray-50">
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                        <span className="text-gray-500">Carregando dados...</span>
-                      </div>
-                    </td>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Médico</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Convênio</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Tipo</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Paciente</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Data</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Valor</th>
                   </tr>
-                ) : filteredProducoes.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                      <div className="flex flex-col items-center gap-3">
-                        <FileText className="h-12 w-12 text-gray-300" />
-                        <span className="text-lg font-medium">Nenhuma produção para {formatSelectedMonth(selectedMonth)}</span>
-                        <span className="text-sm">Clique em "Nova Consulta" para começar</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProducoes.slice(0, 10).map((producao, index) => (
-                    <tr key={producao.id} className={`transition-colors duration-150 hover:bg-blue-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loading ? (
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">Carregando...</td></tr>
+                  ) : filteredProducoes.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                      Nenhuma produção para {formatSelectedMonth(selectedMonth)}
+                    </td></tr>
+                  ) : filteredProducoes.slice(0, 10).map((p) => (
+                    <tr key={p.id} className="hover:bg-blue-50">
+                      <td className="px-6 py-4 font-medium text-gray-900">{p.medico?.nome}</td>
+                      <td className="px-6 py-4 text-gray-700">{p.convenio?.nome}</td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-blue-100 p-1.5 rounded-full">
-                            <User size={14} className="text-blue-600" />
-                          </div>
-                          <span className="font-medium text-gray-900">{producao.medico?.nome}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-green-100 p-1.5 rounded-full">
-                            <Building size={14} className="text-green-600" />
-                          </div>
-                          <span className="text-gray-700">{producao.convenio?.nome}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${
-                          producao.tipo === 'cirurgia'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {producao.tipo === 'cirurgia' ? (
-                            <>
-                              <Scissors size={12} />
-                              Cirurgia
-                            </>
-                          ) : (
-                            <>
-                              <Stethoscope size={12} />
-                              Consulta
-                            </>
-                          )}
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${p.tipo === 'cirurgia' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {p.tipo === 'cirurgia' ? <Scissors size={12} className="inline" /> : <Stethoscope size={12} className="inline" />}
+                          {' '}{p.tipo}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-gray-700">{producao.nome_paciente}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Calendar size={14} className="text-gray-400" />
-                          <span className="text-gray-700">{formatDate(producao.data_consulta)}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="font-bold text-green-600 text-lg">R$ {producao.valor.toFixed(2)}</span>
-                      </td>
+                      <td className="px-6 py-4 text-gray-700">{p.nome_paciente}</td>
+                      <td className="px-6 py-4 text-gray-700">{formatDate(p.data_atendimento)}</td>
+                      <td className="px-6 py-4 font-bold text-green-600">R$ {Number(p.valor).toFixed(2)}</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {hasActiveFilters && filteredProducoes.length > 0 && (
-            <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-t border-gray-200">
-              <div className="flex justify-between items-center">
-                <div className="text-sm text-gray-600">
-                  Total de {filteredProducoes.length} registro{filteredProducoes.length !== 1 ? 's' : ''}
-                  {selectedMedico && ` para ${medicos.find(m => m.id === parseInt(selectedMedico))?.nome}`}
-                  {filtroConvenio && ` no ${convenios.find(c => c.id === parseInt(filtroConvenio))?.nome}`}
-                  {filtroPaciente && ` - Paciente: ${filtroPaciente}`}
+                  ))}
+                </tbody>
+              </table>
+              {filteredProducoes.length > 10 && (
+                <div className="p-4 text-center border-t">
+                  <button onClick={() => setActiveView('report')} className="text-blue-600 hover:text-blue-700 font-medium">
+                    Ver todos os {filteredProducoes.length} registros →
+                  </button>
                 </div>
-                <div className="flex gap-6 items-center">
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-gray-900">
-                      Total: R$ {totalMedicoSelecionado.toFixed(2)}
-                    </div>
-                  </div>
-                  {selectedMedico && (
-                    <div className="text-right bg-purple-100 px-4 py-2 rounded-lg">
-                      <div className="text-sm text-purple-600 font-medium">5% do Total</div>
-                      <div className="text-lg font-bold text-purple-700">
-                        R$ {cincoPorCentoMedico.toFixed(2)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           )}
-
-          {filteredProducoes.length > 10 && (
-            <div className="p-4 text-center border-t border-gray-200">
-              <button
-                onClick={() => setActiveView('report')}
-                className="text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Ver todos os {filteredProducoes.length} registros no relatório →
-              </button>
-            </div>
-          )}
-        </div>
+        </>
       )}
 
-      </>
-
-      )}
-
-      {/* === ABA PARTICULAR === */}
+      {/* ============ ABA PARTICULAR ============ */}
       {tab === 'particular' && particularView === 'form' && (
-      <>
-
-      {/* Summary Cards - Particular */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-emerald-100 text-sm font-medium">Valor Recebido</p>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+              <p className="text-emerald-100 text-sm">Valor Recebido</p>
               <p className="text-2xl font-bold">{money(particularTotal)}</p>
               <p className="text-emerald-200 text-xs mt-1">{formatSelectedMonth(selectedMonth)}</p>
             </div>
-            <div className="bg-white/20 p-3 rounded-lg">
-              <DollarSign className="h-6 w-6" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-teal-100 text-sm font-medium">Valor de Repasse</p>
+            <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white shadow-lg">
+              <p className="text-teal-100 text-sm">Valor de Repasse</p>
               <p className="text-2xl font-bold">{money(particularRepasse)}</p>
               <p className="text-teal-200 text-xs mt-1">{filteredParticulares.length} lançamentos</p>
             </div>
-            <div className="bg-white/20 p-3 rounded-lg">
-              <TrendingUp className="h-6 w-6" />
+          </div>
+
+          <div className="flex justify-end">
+            <button onClick={openParticularNew}
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 shadow-lg">
+              <Plus size={20} /> Novo Lançamento
+            </button>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative">
+                <input type="text" value={particularSearch}
+                  onChange={(e) => setParticularSearch(e.target.value)}
+                  className="w-full p-3 border rounded-lg pl-10" placeholder="Buscar paciente ou médico..." />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              </div>
+              <select value={particularMedico} onChange={(e) => setParticularMedico(e.target.value)}
+                className="p-3 border rounded-lg">
+                <option value="">Todos os médicos</option>
+                {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              </select>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Botão Novo Lançamento Particular */}
-      <div className="flex justify-end">
-        <button
-          onClick={openParticularNew}
-          className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-        >
-          <Plus size={20} />
-          Novo Lançamento
-        </button>
-      </div>
-
-      {/* Filtros Particular */}
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-        <div className="flex items-center gap-4">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={particularSearch}
-              onChange={(e) => setParticularSearch(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent pl-10"
-              placeholder="Buscar por paciente ou médico..."
-            />
-            <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-              <Search size={16} className="text-gray-400" />
-            </div>
-          </div>
-          <select
-            value={particularMedico}
-            onChange={(e) => setParticularMedico(e.target.value)}
-            className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          >
-            <option value="">Todos os médicos</option>
-            {medicos.map((m) => (
-              <option key={m.id} value={m.id}>{m.nome}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Modal Formulário Particular */}
-      {showParticularForm && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto p-4 pt-10" onClick={() => setShowParticularForm(false)}>
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {editingParticular ? 'Editar Lançamento Particular' : 'Novo Lançamento Particular'}
-              </h3>
-              <button onClick={() => setShowParticularForm(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
-            </div>
-            <form onSubmit={saveParticular} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mês de Referência *</label>
-                <select
-                  value={particularForm.month_reference}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, month_reference: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                >
-                  {generateMonthOptions().map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
-                <select
-                  value={particularForm.unidade_id}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, unidade_id: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                >
-                  <option value="">Selecione a unidade</option>
-                  {unidades.map((u) => (
-                    <option key={u.id} value={u.id}>{u.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Médico *</label>
-                <select
-                  value={particularForm.medico_id}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, medico_id: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Selecione o médico</option>
-                  {medicos.map((m) => (
-                    <option key={m.id} value={m.id}>{m.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vínculo</label>
-                <select
-                  value={particularForm.destinatario_tipo}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, destinatario_tipo: e.target.value as 'socio' | 'terceiro' }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                >
-                  <option value="socio">Sócio</option>
-                  <option value="terceiro">Externo</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Paciente Particular *</label>
-                <input
-                  type="text"
-                  value={particularForm.nome_paciente}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, nome_paciente: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
-                <input
-                  type="date"
-                  value={particularForm.data_cirurgia}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, data_cirurgia: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Procedimento</label>
-                <select
-                  value={particularForm.tipo_procedimento}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, tipo_procedimento: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                >
-                  <option value="">Selecione o procedimento</option>
-                  {procedimentos.map((procedimento) => (
-                    <option key={procedimento.id} value={procedimento.nome}>{procedimento.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
-                <select
-                  value={particularForm.forma_pagamento}
-                  onChange={(e) => setParticularForm((p) => ({ ...p, forma_pagamento: e.target.value as 'pix' | 'credito' | 'debito' | 'especie' }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                >
-                  <option value="pix">Pix</option>
-                  <option value="credito">Crédito</option>
-                  <option value="debito">Débito</option>
-                  <option value="especie">Espécie</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Recebido *</label>
-                <MoneyInput
-                  value={particularForm.valor}
-                  onChange={(v) => setParticularForm((p) => ({ ...p, valor: v }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Valor de Repasse</label>
-                <MoneyInput
-                  value={particularForm.valor_repasse_medico}
-                  onChange={(v) => setParticularForm((p) => ({ ...p, valor_repasse_medico: v }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-              <div className="md:col-span-2 flex items-center gap-3">
-                {isAdmin ? (
-                  <>
-                    <input
-                      type="checkbox"
-                      id="check_conferencia"
-                      checked={particularForm.check_conferencia}
-                      onChange={(e) => setParticularForm((p) => ({ ...p, check_conferencia: e.target.checked }))}
-                      className="h-5 w-5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
-                    />
-                    <label htmlFor="check_conferencia" className="text-sm font-medium text-gray-700">Conferido (Check)</label>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${particularForm.check_conferencia ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
-                      {particularForm.check_conferencia ? '✓' : ''}
-                    </span>
-                    <label className="text-sm font-medium text-gray-500">Conferido (apenas administrador)</label>
+          {showParticularForm && (
+            <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto p-4 pt-10"
+              onClick={() => setShowParticularForm(false)}>
+              <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-6"
+                onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold">
+                    {editingParticular ? 'Editar Lançamento Particular' : 'Novo Lançamento Particular'}
+                  </h3>
+                  <button onClick={() => setShowParticularForm(false)} className="text-gray-400 text-2xl">&times;</button>
+                </div>
+                <form onSubmit={saveParticular} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Mês *</label>
+                    <select value={particularForm.month_reference}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, month_reference: e.target.value }))}
+                      className="w-full p-3 border rounded-lg" required>
+                      {generateMonthOptions().map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
                   </div>
-                )}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Unidade</label>
+                    <select value={particularForm.unidade_id}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, unidade_id: e.target.value }))}
+                      className="w-full p-3 border rounded-lg">
+                      <option value="">Selecione</option>
+                      {unidades.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Médico *</label>
+                    <select value={particularForm.medico_id}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, medico_id: e.target.value }))}
+                      className="w-full p-3 border rounded-lg" required>
+                      <option value="">Selecione</option>
+                      {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Vínculo</label>
+                    <select value={particularForm.destinatario_tipo}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, destinatario_tipo: e.target.value as 'socio' | 'terceiro' }))}
+                      className="w-full p-3 border rounded-lg">
+                      <option value="socio">Sócio</option>
+                      <option value="terceiro">Externo</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Paciente *</label>
+                    <input type="text" value={particularForm.nome_paciente}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, nome_paciente: e.target.value }))}
+                      className="w-full p-3 border rounded-lg" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Data *</label>
+                    <input type="date" value={particularForm.data_procedimento}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, data_procedimento: e.target.value }))}
+                      className="w-full p-3 border rounded-lg" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Procedimento</label>
+                    <select value={particularForm.procedimento_id}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, procedimento_id: e.target.value }))}
+                      className="w-full p-3 border rounded-lg">
+                      <option value="">Selecione</option>
+                      {procedimentos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Forma de Pagamento</label>
+                    <select value={particularForm.forma_pagamento}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, forma_pagamento: e.target.value as any }))}
+                      className="w-full p-3 border rounded-lg">
+                      <option value="pix">Pix</option>
+                      <option value="credito">Crédito</option>
+                      <option value="debito">Débito</option>
+                      <option value="especie">Espécie</option>
+                      <option value="deposito">Depósito</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Valor Recebido *</label>
+                    <MoneyInput value={particularForm.valor_bruto}
+                      onChange={(v) => setParticularForm((p) => ({ ...p, valor_bruto: v }))}
+                      className="w-full p-3 border rounded-lg" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Valor de Repasse</label>
+                    <MoneyInput value={particularForm.valor_repasse_medico}
+                      onChange={(v) => setParticularForm((p) => ({ ...p, valor_repasse_medico: v }))}
+                      className="w-full p-3 border rounded-lg" />
+                  </div>
+                  <div className="md:col-span-2 flex items-center gap-3">
+                    <input type="checkbox" checked={particularForm.check_conferencia}
+                      disabled={!isAdmin}
+                      onChange={(e) => setParticularForm((p) => ({ ...p, check_conferencia: e.target.checked }))}
+                      className="h-5 w-5" />
+                    <label className="text-sm font-medium text-gray-700">
+                      Conferido {!isAdmin && '(apenas admin)'}
+                    </label>
+                  </div>
+                  <div className="md:col-span-2 flex justify-end gap-3">
+                    <button type="button" onClick={() => setShowParticularForm(false)}
+                      className="px-6 py-3 text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                    <button type="submit" disabled={particularLoading}
+                      className="px-6 py-3 bg-emerald-600 text-white rounded-lg disabled:opacity-50">
+                      {particularLoading ? 'Salvando...' : editingParticular ? 'Salvar Alterações' : 'Salvar Lançamento'}
+                    </button>
+                  </div>
+                </form>
               </div>
-              <div className="md:col-span-2 flex justify-end gap-3">
-                <button type="button" onClick={() => setShowParticularForm(false)} className="px-6 py-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
-                <button type="submit" disabled={particularLoading} className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
-                  {particularLoading ? 'Salvando...' : editingParticular ? 'Salvar Alterações' : 'Salvar Lançamento'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* Tabela Particular */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Médico</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vínculo</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paciente Particular</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Procedimento</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forma Pagto</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Recebido</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Repasse</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Check</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {particularLoading ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-500">Carregando...</td></tr>
-              ) : filteredParticulares.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-500">
-                  <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  <span className="block text-sm">Nenhum lançamento particular encontrado para este mês.</span>
-                </td></tr>
-              ) : filteredParticulares.map((item) => {
-                const unidadeNome = unidades.find(u => u.id === item.unidade_id)?.nome || '-';
-                return (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-700">{unidadeNome}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{formatDate(item.data_cirurgia)}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{item.destinatario_tipo === 'terceiro' ? 'Externo' : 'Sócio'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{item.nome_paciente}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{item.tipo_procedimento || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{item.forma_pagamento || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(item.valor)}</td>
-                    <td className="px-4 py-3 text-sm text-right font-medium text-teal-700">{money(item.valor_repasse_medico)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${item.check_conferencia ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
-                        {item.check_conferencia ? '✓' : ''}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => openParticularEdit(item)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                          <FileText className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => deleteParticular(item.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            {filteredParticulares.length > 0 && (
-              <tfoot className="bg-gray-50 border-t border-gray-200">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={7} className="px-4 py-3 text-sm font-medium text-gray-700 text-right">Totais:</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(particularTotal)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-teal-700">{money(particularRepasse)}</td>
-                  <td colSpan={2}></td>
+                  {['Unidade', 'Data', 'Médico', 'Vínculo', 'Paciente', 'Procedimento', 'Pagto', 'Recebido', 'Repasse', 'Check', 'Ações'].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                  ))}
                 </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-
-      </>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {particularLoading ? (
+                  <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-500">Carregando...</td></tr>
+                ) : filteredParticulares.length === 0 ? (
+                  <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-500">Nenhum lançamento encontrado.</td></tr>
+                ) : filteredParticulares.map((item) => {
+                  const un = unidades.find((u) => u.id === item.unidade_id)?.nome || '-';
+                  const proc = item.procedimento?.nome || item.procedimento_descricao || '-';
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm">{un}</td>
+                      <td className="px-4 py-3 text-sm">{formatDate(item.data_procedimento)}</td>
+                      <td className="px-4 py-3 text-sm font-medium">{item.medico?.nome || '-'}</td>
+                      <td className="px-4 py-3 text-sm">{item.destinatario_tipo === 'terceiro' ? 'Externo' : 'Sócio'}</td>
+                      <td className="px-4 py-3 text-sm">{item.nome_paciente}</td>
+                      <td className="px-4 py-3 text-sm">{proc}</td>
+                      <td className="px-4 py-3 text-sm">{item.forma_pagamento}</td>
+                      <td className="px-4 py-3 text-sm text-right font-medium">{money(item.valor_bruto)}</td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-teal-700">{money(item.valor_repasse_medico)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${item.check_conferencia ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                          {item.check_conferencia ? '✓' : ''}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex gap-1 justify-center">
+                          <button onClick={() => openParticularEdit(item)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">
+                            <FileText className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => deleteParticular(item.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {filteredParticulares.length > 0 && (
+                <tfoot className="bg-gray-50 border-t">
+                  <tr>
+                    <td colSpan={7} className="px-4 py-3 text-sm text-right font-medium">Totais:</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold">{money(particularTotal)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold text-teal-700">{money(particularRepasse)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </>
       )}
 
-      {/* === ABA PARTICULAR: RELATÓRIO === */}
+      {/* ============ ABA PARTICULAR: RELATÓRIO ============ */}
       {tab === 'particular' && particularView === 'report' && (
         <ParticularReport
           particulares={particulares}
@@ -1480,213 +970,146 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         />
       )}
 
-      {/* === ABA REPASSE IMAGEM === */}
+      {/* ============ ABA REPASSE IMAGEM ============ */}
       {tab === 'repasse-imagem' && imagemView === 'form' && (
         <div className="space-y-6">
-          {/* Filtros e configuração */}
-          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+          <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Clínica</label>
-                <select
-                  value={imagemClinica}
-                  onChange={(e) => setImagemClinica(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                >
-                  <option value="">Todas as clínicas</option>
-                  {hospitais.map((hospital) => (
-                    <option key={hospital.id} value={hospital.id}>{hospital.nome}</option>
-                  ))}
+                <label className="block text-sm font-medium mb-2">Clínica</label>
+                <select value={imagemClinica} onChange={(e) => setImagemClinica(e.target.value)}
+                  className="w-full p-3 border rounded-lg">
+                  <option value="">Todas</option>
+                  {hospitais.map((h) => <option key={h.id} value={h.id}>{h.nome}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
-                <select
-                  value={imagemMedicoFiltro}
-                  onChange={(e) => setImagemMedicoFiltro(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                >
-                  <option value="">Todos os médicos</option>
-                  {medicos.map((medico) => (
-                    <option key={medico.id} value={medico.id}>{medico.nome}</option>
-                  ))}
+                <label className="block text-sm font-medium mb-2">Médico</label>
+                <select value={imagemMedicoFiltro} onChange={(e) => setImagemMedicoFiltro(e.target.value)}
+                  className="w-full p-3 border rounded-lg">
+                  <option value="">Todos</option>
+                  {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Imposto (%)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={imagemImposto}
+                <label className="block text-sm font-medium mb-2">Imposto (%)</label>
+                <input type="number" min="0" max="100" step="0.01" value={imagemImposto}
                   onChange={(e) => setImagemImposto(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
+                  className="w-full p-3 border rounded-lg" />
               </div>
               <div className="bg-indigo-50 rounded-lg px-5 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">Total filtrado</p>
-                <p className="text-xl font-bold text-indigo-800">{money(kpisImagem.totalRecebido)}</p>
+                <p className="text-xs font-medium text-indigo-600">Total filtrado</p>
+                <p className="text-xl font-bold text-indigo-800">{money(kpisImagem.total)}</p>
               </div>
             </div>
           </div>
 
-          {/* KPIs de imagem */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-indigo-100 text-sm font-medium">Total Recebido</p>
-                  <p className="text-2xl font-bold">{money(kpisImagem.totalRecebido)}</p>
-                  <p className="text-indigo-200 text-xs mt-1">{formatSelectedMonth(selectedMonth)}</p>
-                </div>
-                <div className="bg-white/20 p-3 rounded-lg"><DollarSign className="h-6 w-6" /></div>
-              </div>
+              <p className="text-indigo-100 text-sm">Total Recebido</p>
+              <p className="text-2xl font-bold">{money(kpisImagem.total)}</p>
             </div>
             <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-red-100 text-sm font-medium">Imposto</p>
-                  <p className="text-2xl font-bold">{money(kpisImagem.totalImposto)}</p>
-                  <p className="text-red-200 text-xs mt-1">Sobre o total recebido</p>
-                </div>
-                <div className="bg-white/20 p-3 rounded-lg"><FileText className="h-6 w-6" /></div>
-              </div>
+              <p className="text-red-100 text-sm">Imposto</p>
+              <p className="text-2xl font-bold">{money(kpisImagem.imposto)}</p>
             </div>
             <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100 text-sm font-medium">Ficou na Casa (50%)</p>
-                  <p className="text-2xl font-bold">{money(kpisImagem.ficouNaCasa)}</p>
-                  <p className="text-blue-200 text-xs mt-1">Após imposto</p>
-                </div>
-                <div className="bg-white/20 p-3 rounded-lg"><Building className="h-6 w-6" /></div>
-              </div>
+              <p className="text-blue-100 text-sm">Ficou na Casa (50%)</p>
+              <p className="text-2xl font-bold">{money(kpisImagem.casa)}</p>
             </div>
             <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-emerald-100 text-sm font-medium">Para Médicos (50%)</p>
-                  <p className="text-2xl font-bold">{money(kpisImagem.foiParaMedicos)}</p>
-                  <p className="text-emerald-200 text-xs mt-1">Após imposto</p>
-                </div>
-                <div className="bg-white/20 p-3 rounded-lg"><TrendingUp className="h-6 w-6" /></div>
-              </div>
+              <p className="text-emerald-100 text-sm">Para Médicos (50%)</p>
+              <p className="text-2xl font-bold">{money(kpisImagem.medico)}</p>
             </div>
           </div>
 
-          {/* Formulário de lançamento */}
-          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <form onSubmit={saveImagem} className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-4 items-end">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Lançamentos da clínica</h3>
-                <p className="text-sm text-gray-500">Informe o total por médico para calcular o repasse automaticamente.</p>
-              </div>
-              {editingRepasseImagem && (
-                <button type="button" onClick={resetRepasseImagemForm} className="text-sm text-gray-500 hover:text-gray-800">Cancelar edição</button>
-              )}
-            </div>
-            <form onSubmit={saveRepasseImagem} className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-4 items-end">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
-                <select
-                  value={imagemMedico}
-                  onChange={(e) => setImagemMedico(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Selecione o médico</option>
-                  {medicos.map((medico) => (
-                    <option key={medico.id} value={medico.id}>{medico.nome}</option>
-                  ))}
+                <label className="block text-sm font-medium mb-2">Médico</label>
+                <select value={imagemMedico} onChange={(e) => setImagemMedico(e.target.value)}
+                  className="w-full p-3 border rounded-lg" required>
+                  <option value="">Selecione</option>
+                  {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Total</label>
-                <MoneyInput
-                  value={imagemTotal}
-                  onChange={(v) => setImagemTotal(v)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  required
-                />
+                <label className="block text-sm font-medium mb-2">Total</label>
+                <MoneyInput value={imagemTotal} onChange={setImagemTotal}
+                  className="w-full p-3 border rounded-lg" required />
               </div>
-              <button
-                type="submit"
-                disabled={repasseImagemLoading || !imagemClinica}
-                className="px-5 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-50"
-              >
-                {editingRepasseImagem ? 'Salvar alteração' : 'Adicionar linha'}
+              <button type="submit" disabled={repasseImagemLoading || !imagemClinica}
+                className="px-5 py-3 bg-indigo-600 text-white rounded-lg disabled:opacity-50">
+                {editingRepasseImagem ? 'Salvar' : 'Adicionar'}
               </button>
             </form>
           </div>
 
-          {/* Tabela de lançamentos */}
-          <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px]">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th colSpan={2} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">MÉDICO</th>
-                    <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">TOTAL</th>
-                    <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">IMPOSTO {Number(imagemImposto).toFixed(2).replace('.', ',')} %</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">TOTAL S/ IMPOSTO</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">CLÍNICA 50%</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">REPASSE 50%</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">AÇÕES</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {repasseImagemLoading ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Carregando lançamentos...</td></tr>
-                  ) : !imagemClinica && !imagemMedicoFiltro ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Selecione uma clínica ou um médico para visualizar os lançamentos.</td></tr>
-                  ) : imagemRowsFiltradas.length === 0 ? (
-                    <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Nenhum lançamento para os filtros selecionados em {formatSelectedMonth(selectedMonth)}.</td></tr>
-                  ) : (
-                    imagemRowsFiltradas.map((item) => {
-                      const total = Number(item.total || 0);
-                      const imposto = total * Number(item.imposto_percentual || 0) / 100;
-                      const semImposto = total - imposto;
-                      const metade = semImposto / 2;
-                      return (
-                        <tr key={item.id} className="hover:bg-indigo-50 transition-colors">
-                          <td colSpan={2} className="px-4 py-3 text-sm font-medium text-gray-900">{item.medico?.nome || '-'}</td>
-                          <td colSpan={2} className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(total)}</td>
-                          <td colSpan={2} className="px-4 py-3 text-sm text-right text-red-600">{money(imposto)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{money(semImposto)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-blue-700">{money(metade)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700">{money(metade)}</td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button onClick={() => openRepasseImagemEdit(item)} className="px-2 py-1 text-indigo-600 hover:bg-indigo-50 rounded text-xs">Editar</button>
-                              <button onClick={() => deleteRepasseImagem(item.id)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs">Excluir</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-                {imagemRowsFiltradas.length > 0 && (
-                  <tfoot className="bg-gray-50 border-t border-gray-200">
-                    <tr>
-                      <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-700">Total</td>
-                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(kpisImagem.totalRecebido)}</td>
-                      <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(kpisImagem.totalImposto)}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(kpisImagem.semImposto)}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(kpisImagem.ficouNaCasa)}</td>
-                      <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(kpisImagem.foiParaMedicos)}</td>
-                      <td></td>
+          <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
+            <table className="w-full min-w-[980px]">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th colSpan={2} className="px-4 py-3 text-left text-sm font-semibold">MÉDICO</th>
+                  <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold">TOTAL</th>
+                  <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold">
+                    IMPOSTO {Number(imagemImposto).toFixed(2).replace('.', ',')} %
+                  </th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold">S/ IMPOSTO</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold">CASA 50%</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold">REPASSE 50%</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold">AÇÕES</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {repasseImagemLoading ? (
+                  <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Carregando...</td></tr>
+                ) : !imagemClinica && !imagemMedicoFiltro ? (
+                  <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">
+                    Selecione uma clínica ou médico.
+                  </td></tr>
+                ) : imagemRowsFiltradas.length === 0 ? (
+                  <tr><td colSpan={11} className="px-6 py-10 text-center text-gray-500">Nenhum lançamento.</td></tr>
+                ) : imagemRowsFiltradas.map((item) => {
+                  const t = Number(item.total || 0);
+                  const imp = (t * Number(item.imposto_percentual || 0)) / 100;
+                  const sem = t - imp;
+                  return (
+                    <tr key={item.id} className="hover:bg-indigo-50">
+                      <td colSpan={2} className="px-4 py-3 text-sm font-medium">{item.medico?.nome || '-'}</td>
+                      <td colSpan={2} className="px-4 py-3 text-sm text-right">{money(t)}</td>
+                      <td colSpan={2} className="px-4 py-3 text-sm text-right text-red-600">{money(imp)}</td>
+                      <td className="px-4 py-3 text-sm text-right">{money(sem)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-blue-700">{money(sem / 2)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-emerald-700">{money(sem / 2)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex gap-1 justify-center">
+                          <button onClick={() => openImagemEdit(item)} className="px-2 py-1 text-indigo-600 hover:bg-indigo-50 rounded text-xs">Editar</button>
+                          <button onClick={() => deleteImagem(item.id)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs">Excluir</button>
+                        </div>
+                      </td>
                     </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
+                  );
+                })}
+              </tbody>
+              {imagemRowsFiltradas.length > 0 && (
+                <tfoot className="bg-gray-50 border-t">
+                  <tr>
+                    <td colSpan={2} className="px-4 py-3 text-sm font-bold">Total</td>
+                    <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold">{money(kpisImagem.total)}</td>
+                    <td colSpan={2} className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(kpisImagem.imposto)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold">{money(kpisImagem.sem)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(kpisImagem.casa)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(kpisImagem.medico)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
         </div>
       )}
 
-      {/* === ABA REPASSE IMAGEM: RELATÓRIO === */}
+      {/* ============ ABA REPASSE IMAGEM: RELATÓRIO ============ */}
       {tab === 'repasse-imagem' && imagemView === 'report' && (
         <RepasseImagemReport
           repasses={repassesImagem}
@@ -1704,13 +1127,12 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
         onClose={() => setEditingProducao(null)}
         onSave={loadData}
       />
-
       <ConfirmDeleteModal
         isOpen={!!deletingId}
         onClose={() => setDeletingId(null)}
         onConfirm={confirmDelete}
         title="Excluir Produção"
-        message="Tem certeza que deseja excluir este registro de produção? Esta ação não pode ser desfeita."
+        message="Tem certeza que deseja excluir este registro?"
         loading={deleteLoading}
       />
     </div>
@@ -1718,490 +1140,263 @@ export const ProducaoMensalComponent: React.FC<ProducaoMensalProps> = ({ initial
 };
 
 /* ============================================================
- * Relatório de Repasse Imagem
- * KPIs: total recebido, imposto, ficou na casa, foi para médicos
- * Filtro por médico e por clínica
- * Tabela detalhada + totais
+ * Relatório de Repasse Imagem (inalterado)
  * ============================================================ */
 interface RepasseImagemReportProps {
   repasses: RepasseImagem[];
   medicos: Medico[];
   hospitais: Hospital[];
   selectedMonth: string;
-  formatSelectedMonth: (month: string) => string;
-  money: (value: number) => string;
+  formatSelectedMonth: (m: string) => string;
+  money: (v: number) => string;
 }
 
 const RepasseImagemReport: React.FC<RepasseImagemReportProps> = ({
-  repasses,
-  medicos,
-  hospitais,
-  selectedMonth,
-  formatSelectedMonth,
-  money,
+  repasses, medicos, hospitais, selectedMonth, formatSelectedMonth, money,
 }) => {
   const [filtroMedico, setFiltroMedico] = useState('');
   const [filtroClinica, setFiltroClinica] = useState('');
 
-  const rows = repasses.filter((item) => {
-    const matchMedico = !filtroMedico || String(item.medico_id) === filtroMedico;
-    const matchClinica = !filtroClinica || String(item.hospital_id) === filtroClinica;
-    return matchMedico && matchClinica;
+  const rows = repasses.filter((i) => {
+    const mM = !filtroMedico || String(i.medico_id) === filtroMedico;
+    const mC = !filtroClinica || String(i.hospital_id) === filtroClinica;
+    return mM && mC;
   });
 
-  const totalRecebido = rows.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const totalImposto = rows.reduce(
-    (sum, item) => sum + (Number(item.total || 0) * Number(item.imposto_percentual || 0)) / 100,
-    0
-  );
-  const semImposto = totalRecebido - totalImposto;
-  const ficouNaCasa = semImposto / 2;
-  const foiParaMedicos = semImposto / 2;
+  const total = rows.reduce((s, i) => s + Number(i.total || 0), 0);
+  const imposto = rows.reduce((s, i) => s + (Number(i.total || 0) * Number(i.imposto_percentual || 0)) / 100, 0);
+  const sem = total - imposto;
 
-  // Agrupamento por médico (subtotais)
-  const grupos = medicos
-    .map((medico) => {
-      const linhas = rows.filter((r) => r.medico_id === medico.id);
-      if (linhas.length === 0) return null;
-      const total = linhas.reduce((s, r) => s + Number(r.total || 0), 0);
-      const imposto = linhas.reduce((s, r) => s + (Number(r.total || 0) * Number(r.imposto_percentual || 0)) / 100, 0);
-      const sem = total - imposto;
-      return {
-        medico,
-        linhas,
-        total,
-        imposto,
-        semImposto: sem,
-        casa: sem / 2,
-        repasse: sem / 2,
-      };
-    })
-    .filter(Boolean) as Array<{
-      medico: Medico;
-      linhas: RepasseImagem[];
-      total: number;
-      imposto: number;
-      semImposto: number;
-      casa: number;
-      repasse: number;
-    }>;
+  const grupos = medicos.map((m) => {
+    const linhas = rows.filter((r) => r.medico_id === m.id);
+    if (linhas.length === 0) return null;
+    const t = linhas.reduce((s, r) => s + Number(r.total || 0), 0);
+    const i = linhas.reduce((s, r) => s + (Number(r.total || 0) * Number(r.imposto_percentual || 0)) / 100, 0);
+    return { medico: m, linhas, total: t, imposto: i, sem: t - i, casa: (t - i) / 2, repasse: (t - i) / 2 };
+  }).filter(Boolean) as any[];
 
   const hospitalNome = (id: number) => hospitais.find((h) => h.id === id)?.nome || '-';
 
   return (
     <div className="space-y-6">
-      {/* Filtros */}
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+      <div className="bg-white p-6 rounded-xl shadow-lg">
         <div className="flex items-center gap-2 mb-4">
-          <div className="bg-indigo-100 p-2 rounded-lg">
-            <Filter className="h-5 w-5 text-indigo-600" />
-          </div>
-          <span className="font-semibold text-gray-800">Filtros do relatório</span>
+          <Filter className="h-5 w-5 text-indigo-600" />
+          <span className="font-semibold">Filtros</span>
           <span className="text-sm text-gray-500 ml-auto">{formatSelectedMonth(selectedMonth)}</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
-            <select
-              value={filtroMedico}
-              onChange={(e) => setFiltroMedico(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              <option value="">Todos os médicos</option>
-              {medicos.map((m) => (
-                <option key={m.id} value={m.id}>{m.nome}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Clínica</label>
-            <select
-              value={filtroClinica}
-              onChange={(e) => setFiltroClinica(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              <option value="">Todas as clínicas</option>
-              {hospitais.map((h) => (
-                <option key={h.id} value={h.id}>{h.nome}</option>
-              ))}
-            </select>
-          </div>
+          <select value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} className="p-3 border rounded-lg">
+            <option value="">Todos os médicos</option>
+            {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+          </select>
+          <select value={filtroClinica} onChange={(e) => setFiltroClinica(e.target.value)} className="p-3 border rounded-lg">
+            <option value="">Todas as clínicas</option>
+            {hospitais.map((h) => <option key={h.id} value={h.id}>{h.nome}</option>)}
+          </select>
         </div>
-        {(filtroMedico || filtroClinica) && (
-          <button
-            onClick={() => { setFiltroMedico(''); setFiltroClinica(''); }}
-            className="mt-4 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-          >
-            Limpar filtros
-          </button>
-        )}
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-indigo-100 text-sm font-medium">Total Recebido</p>
-              <p className="text-2xl font-bold">{money(totalRecebido)}</p>
-              <p className="text-indigo-200 text-xs mt-1">{rows.length} lançamento{rows.length !== 1 ? 's' : ''}</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg"><DollarSign className="h-6 w-6" /></div>
-          </div>
+          <p className="text-sm">Total Recebido</p>
+          <p className="text-2xl font-bold">{money(total)}</p>
         </div>
         <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-red-100 text-sm font-medium">Imposto</p>
-              <p className="text-2xl font-bold">{money(totalImposto)}</p>
-              <p className="text-red-200 text-xs mt-1">Sobre o total recebido</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg"><FileText className="h-6 w-6" /></div>
-          </div>
+          <p className="text-sm">Imposto</p>
+          <p className="text-2xl font-bold">{money(imposto)}</p>
         </div>
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 text-sm font-medium">Ficou na Casa (50%)</p>
-              <p className="text-2xl font-bold">{money(ficouNaCasa)}</p>
-              <p className="text-blue-200 text-xs mt-1">Após imposto</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg"><Building className="h-6 w-6" /></div>
-          </div>
+          <p className="text-sm">Ficou na Casa</p>
+          <p className="text-2xl font-bold">{money(sem / 2)}</p>
         </div>
         <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-emerald-100 text-sm font-medium">Para Médicos (50%)</p>
-              <p className="text-2xl font-bold">{money(foiParaMedicos)}</p>
-              <p className="text-emerald-200 text-xs mt-1">Após imposto</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg"><Users className="h-6 w-6" /></div>
-          </div>
+          <p className="text-sm">Para Médicos</p>
+          <p className="text-2xl font-bold">{money(sem / 2)}</p>
         </div>
       </div>
 
-      {/* Detalhamento */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Detalhamento por médico</h3>
-          <p className="text-sm text-gray-500">
-            Totais consolidados de {formatSelectedMonth(selectedMonth)}
-            {filtroMedico && ` — ${medicos.find((m) => String(m.id) === filtroMedico)?.nome}`}
-            {filtroClinica && ` — ${hospitalNome(Number(filtroClinica))}`}
-          </p>
-        </div>
-
-        {rows.length === 0 ? (
-          <div className="px-6 py-12 text-center text-gray-500">
-            <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-            <p className="text-lg font-medium">Nenhum lançamento para os filtros selecionados</p>
-            <p className="text-sm">Ajuste os filtros ou selecione outro mês.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px]">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Médico</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Clínica</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Imposto (%)</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Valor Imposto</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">S/ Imposto</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Casa 50%</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Médico 50%</th>
+      <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
+        <table className="w-full min-w-[980px]">
+          <thead>
+            <tr className="bg-gray-50 border-b">
+              {['Médico','Clínica','Total','Imposto (%)','Valor Imposto','S/ Imposto','Casa 50%','Médico 50%'].map((h) => (
+                <th key={h} className="px-4 py-3 text-left text-sm font-semibold">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {grupos.map((g) => (
+              <React.Fragment key={g.medico.id}>
+                <tr className="bg-indigo-50/60">
+                  <td colSpan={2} className="px-4 py-2 text-sm font-bold text-indigo-800">{g.medico.nome}</td>
+                  <td className="px-4 py-2 text-sm text-right font-bold">{money(g.total)}</td>
+                  <td></td>
+                  <td className="px-4 py-2 text-sm text-right font-bold text-red-600">{money(g.imposto)}</td>
+                  <td className="px-4 py-2 text-sm text-right font-bold">{money(g.sem)}</td>
+                  <td className="px-4 py-2 text-sm text-right font-bold text-blue-700">{money(g.casa)}</td>
+                  <td className="px-4 py-2 text-sm text-right font-bold text-emerald-700">{money(g.repasse)}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {grupos.map((grupo) => (
-                  <React.Fragment key={grupo.medico.id}>
-                    <tr className="bg-indigo-50/60">
-                      <td colSpan={2} className="px-4 py-2 text-sm font-bold text-indigo-800">
-                        {grupo.medico.nome}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-gray-900">{money(grupo.total)}</td>
-                      <td className="px-4 py-2"></td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-red-600">{money(grupo.imposto)}</td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-gray-900">{money(grupo.semImposto)}</td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-blue-700">{money(grupo.casa)}</td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-emerald-700">{money(grupo.repasse)}</td>
+                {g.linhas.map((l: RepasseImagem) => {
+                  const t = Number(l.total || 0);
+                  const p = Number(l.imposto_percentual || 0);
+                  const imp = (t * p) / 100;
+                  const s = t - imp;
+                  return (
+                    <tr key={l.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm">{l.medico?.nome || g.medico.nome}</td>
+                      <td className="px-4 py-3 text-sm">{hospitalNome(l.hospital_id)}</td>
+                      <td className="px-4 py-3 text-sm text-right">{money(t)}</td>
+                      <td className="px-4 py-3 text-sm text-right">{p.toFixed(2).replace('.', ',')} %</td>
+                      <td className="px-4 py-3 text-sm text-right text-red-600">{money(imp)}</td>
+                      <td className="px-4 py-3 text-sm text-right">{money(s)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-blue-700">{money(s / 2)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-emerald-700">{money(s / 2)}</td>
                     </tr>
-                    {grupo.linhas.map((linha) => {
-                      const total = Number(linha.total || 0);
-                      const pct = Number(linha.imposto_percentual || 0);
-                      const imposto = (total * pct) / 100;
-                      const sem = total - imposto;
-                      return (
-                        <tr key={linha.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-sm text-gray-700">{linha.medico?.nome || grupo.medico.nome}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{hospitalNome(linha.hospital_id)}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-900">{money(total)}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-700">{pct.toFixed(2).replace('.', ',')} %</td>
-                          <td className="px-4 py-3 text-sm text-right text-red-600">{money(imposto)}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-900">{money(sem)}</td>
-                          <td className="px-4 py-3 text-sm text-right text-blue-700">{money(sem / 2)}</td>
-                          <td className="px-4 py-3 text-sm text-right text-emerald-700">{money(sem / 2)}</td>
-                        </tr>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
-              </tbody>
-              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
-                <tr>
-                  <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-900">TOTAL GERAL</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(totalRecebido)}</td>
-                  <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(totalImposto)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(semImposto)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(ficouNaCasa)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(foiParaMedicos)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </tbody>
+          <tfoot className="bg-gray-50 border-t-2">
+            <tr>
+              <td colSpan={2} className="px-4 py-3 text-sm font-bold">TOTAL GERAL</td>
+              <td className="px-4 py-3 text-sm text-right font-bold">{money(total)}</td>
+              <td></td>
+              <td className="px-4 py-3 text-sm text-right font-bold text-red-600">{money(imposto)}</td>
+              <td className="px-4 py-3 text-sm text-right font-bold">{money(sem)}</td>
+              <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(sem / 2)}</td>
+              <td className="px-4 py-3 text-sm text-right font-bold text-emerald-700">{money(sem / 2)}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
 };
 
 /* ============================================================
- * Relatório de Particular
- * KPIs: valor recebido, valor de repasse médico, líquido da casa
- * Filtros: médico + período (data início/fim)
- * Tabela detalhada + totais
+ * Relatório Particular
  * ============================================================ */
 interface ParticularReportProps {
-  particulares: Repasse[];
+  particulares: RepasseParticular[];
   medicos: Medico[];
   unidades: Unidade[];
   selectedMonth: string;
-  formatSelectedMonth: (month: string) => string;
-  formatDate: (date: string) => string;
-  money: (value: number) => string;
+  formatSelectedMonth: (m: string) => string;
+  formatDate: (d: string) => string;
+  money: (v: number) => string;
 }
 
 const ParticularReport: React.FC<ParticularReportProps> = ({
-  particulares,
-  medicos,
-  unidades,
-  selectedMonth,
-  formatSelectedMonth,
-  formatDate,
-  money,
+  particulares, medicos, unidades, selectedMonth, formatSelectedMonth, formatDate, money,
 }) => {
   const [filtroMedico, setFiltroMedico] = useState('');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
 
-  // Normaliza data (yyyy-mm-dd) para comparação
-  const toISODate = (d: string) => (d ? d.split('T')[0] : '');
-
-  const rows = particulares.filter((item) => {
-    const matchMedico = !filtroMedico || String(item.medico_id) === filtroMedico;
-    const itemDate = toISODate(item.data_cirurgia);
-    const matchInicio = !dataInicio || itemDate >= dataInicio;
-    const matchFim = !dataFim || itemDate <= dataFim;
-    return matchMedico && matchInicio && matchFim;
+  const iso = (d: string) => (d ? d.split('T')[0] : '');
+  const rows = particulares.filter((i) => {
+    const mM = !filtroMedico || String(i.medico_id) === filtroMedico;
+    const ini = iso(i.data_procedimento);
+    return mM && (!dataInicio || ini >= dataInicio) && (!dataFim || ini <= dataFim);
   });
 
-  const totalRecebido = rows.reduce((sum, item) => sum + Number(item.valor || 0), 0);
-  const totalRepasse = rows.reduce((sum, item) => sum + Number(item.valor_repasse_medico || 0), 0);
-  const liquidoCasa = totalRecebido - totalRepasse;
+  const totalRecebido = rows.reduce((s, i) => s + Number(i.valor_bruto || 0), 0);
+  const totalRepasse = rows.reduce((s, i) => s + Number(i.valor_repasse_medico || 0), 0);
+  const liquido = totalRecebido - totalRepasse;
 
-  // Agrupamento por médico (subtotais)
-  const grupos = medicos
-    .map((medico) => {
-      const linhas = rows.filter((r) => r.medico_id === medico.id);
-      if (linhas.length === 0) return null;
-      const recebido = linhas.reduce((s, r) => s + Number(r.valor || 0), 0);
-      const repasse = linhas.reduce((s, r) => s + Number(r.valor_repasse_medico || 0), 0);
-      return {
-        medico,
-        linhas,
-        recebido,
-        repasse,
-        liquido: recebido - repasse,
-        qtd: linhas.length,
-      };
-    })
-    .filter(Boolean) as Array<{
-      medico: Medico;
-      linhas: Repasse[];
-      recebido: number;
-      repasse: number;
-      liquido: number;
-      qtd: number;
-    }>;
+  const grupos = medicos.map((m) => {
+    const linhas = rows.filter((r) => r.medico_id === m.id);
+    if (linhas.length === 0) return null;
+    const rec = linhas.reduce((s, r) => s + Number(r.valor_bruto || 0), 0);
+    const rep = linhas.reduce((s, r) => s + Number(r.valor_repasse_medico || 0), 0);
+    return { medico: m, linhas, recebido: rec, repasse: rep, liquido: rec - rep, qtd: linhas.length };
+  }).filter(Boolean) as any[];
 
-  const unidadeNome = (id?: number | null) => {
-    if (!id) return '-';
-    return unidades.find((u) => u.id === id)?.nome || '-';
-  };
+  const unNome = (id?: number | null) => (id ? unidades.find((u) => u.id === id)?.nome || '-' : '-');
 
   return (
     <div className="space-y-6">
-      {/* Filtros */}
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+      <div className="bg-white p-6 rounded-xl shadow-lg">
         <div className="flex items-center gap-2 mb-4">
-          <div className="bg-emerald-100 p-2 rounded-lg">
-            <Filter className="h-5 w-5 text-emerald-600" />
-          </div>
-          <span className="font-semibold text-gray-800">Filtros do relatório</span>
-          <span className="text-sm text-gray-500 ml-auto">Mês: {formatSelectedMonth(selectedMonth)}</span>
+          <Filter className="h-5 w-5 text-emerald-600" />
+          <span className="font-semibold">Filtros</span>
+          <span className="text-sm text-gray-500 ml-auto">{formatSelectedMonth(selectedMonth)}</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Médico</label>
-            <select
-              value={filtroMedico}
-              onChange={(e) => setFiltroMedico(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            >
-              <option value="">Todos os médicos</option>
-              {medicos.map((m) => (
-                <option key={m.id} value={m.id}>{m.nome}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Data Início</label>
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Data Fim</label>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
-          </div>
+          <select value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} className="p-3 border rounded-lg">
+            <option value="">Todos os médicos</option>
+            {medicos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+          </select>
+          <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="p-3 border rounded-lg" />
+          <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="p-3 border rounded-lg" />
         </div>
-        {(filtroMedico || dataInicio || dataFim) && (
-          <button
-            onClick={() => { setFiltroMedico(''); setDataInicio(''); setDataFim(''); }}
-            className="mt-4 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-          >
-            Limpar filtros
-          </button>
-        )}
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-emerald-100 text-sm font-medium">Valor Recebido</p>
-              <p className="text-2xl font-bold">{money(totalRecebido)}</p>
-              <p className="text-emerald-200 text-xs mt-1">{rows.length} lançamento{rows.length !== 1 ? 's' : ''}</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg"><DollarSign className="h-6 w-6" /></div>
-          </div>
+          <p className="text-sm">Valor Recebido</p>
+          <p className="text-2xl font-bold">{money(totalRecebido)}</p>
         </div>
         <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-teal-100 text-sm font-medium">Repasse Médico</p>
-              <p className="text-2xl font-bold">{money(totalRepasse)}</p>
-              <p className="text-teal-200 text-xs mt-1">Total pago aos médicos</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg"><TrendingUp className="h-6 w-6" /></div>
-          </div>
+          <p className="text-sm">Repasse Médico</p>
+          <p className="text-2xl font-bold">{money(totalRepasse)}</p>
         </div>
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 text-sm font-medium">Líquido da Casa</p>
-              <p className="text-2xl font-bold">{money(liquidoCasa)}</p>
-              <p className="text-blue-200 text-xs mt-1">Recebido − Repasse</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-lg"><Building className="h-6 w-6" /></div>
-          </div>
+          <p className="text-sm">Líquido da Casa</p>
+          <p className="text-2xl font-bold">{money(liquido)}</p>
         </div>
       </div>
 
-      {/* Detalhamento */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Detalhamento por médico</h3>
-          <p className="text-sm text-gray-500">
-            Totais consolidados de {formatSelectedMonth(selectedMonth)}
-            {filtroMedico && ` — ${medicos.find((m) => String(m.id) === filtroMedico)?.nome}`}
-            {(dataInicio || dataFim) && ` — período ${dataInicio ? formatDate(dataInicio) : '...'} a ${dataFim ? formatDate(dataFim) : '...'}`}
-          </p>
-        </div>
-
-        {rows.length === 0 ? (
-          <div className="px-6 py-12 text-center text-gray-500">
-            <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-            <p className="text-lg font-medium">Nenhum lançamento para os filtros selecionados</p>
-            <p className="text-sm">Ajuste os filtros ou selecione outro mês.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px]">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Médico</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unidade</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Data</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Paciente</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Procedimento</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Valor Recebido</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Repasse Médico</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Líquido Casa</th>
+      <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
+        <table className="w-full min-w-[1080px]">
+          <thead>
+            <tr className="bg-gray-50 border-b">
+              {['Médico','Unidade','Data','Paciente','Procedimento','Recebido','Repasse','Líquido'].map((h) => (
+                <th key={h} className="px-4 py-3 text-left text-sm font-semibold">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {grupos.map((g) => (
+              <React.Fragment key={g.medico.id}>
+                <tr className="bg-emerald-50/60">
+                  <td colSpan={5} className="px-4 py-2 text-sm font-bold text-emerald-800">
+                    {g.medico.nome} — {g.qtd} lançamento(s)
+                  </td>
+                  <td className="px-4 py-2 text-sm text-right font-bold">{money(g.recebido)}</td>
+                  <td className="px-4 py-2 text-sm text-right font-bold text-teal-700">{money(g.repasse)}</td>
+                  <td className="px-4 py-2 text-sm text-right font-bold text-blue-700">{money(g.liquido)}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {grupos.map((grupo) => (
-                  <React.Fragment key={grupo.medico.id}>
-                    <tr className="bg-emerald-50/60">
-                      <td colSpan={5} className="px-4 py-2 text-sm font-bold text-emerald-800">
-                        {grupo.medico.nome} — {grupo.qtd} lançamento{grupo.qtd !== 1 ? 's' : ''}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-gray-900">{money(grupo.recebido)}</td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-teal-700">{money(grupo.repasse)}</td>
-                      <td className="px-4 py-2 text-sm text-right font-bold text-blue-700">{money(grupo.liquido)}</td>
+                {g.linhas.map((l: RepasseParticular) => {
+                  const rec = Number(l.valor_bruto || 0);
+                  const rep = Number(l.valor_repasse_medico || 0);
+                  return (
+                    <tr key={l.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm">{l.medico?.nome || g.medico.nome}</td>
+                      <td className="px-4 py-3 text-sm">{unNome(l.unidade_id)}</td>
+                      <td className="px-4 py-3 text-sm">{formatDate(l.data_procedimento)}</td>
+                      <td className="px-4 py-3 text-sm">{l.nome_paciente}</td>
+                      <td className="px-4 py-3 text-sm">{l.procedimento?.nome || l.procedimento_descricao || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-right">{money(rec)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-teal-700">{money(rep)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-blue-700">{money(rec - rep)}</td>
                     </tr>
-                    {grupo.linhas.map((linha) => {
-                      const recebido = Number(linha.valor || 0);
-                      const repasse = Number(linha.valor_repasse_medico || 0);
-                      return (
-                        <tr key={linha.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-sm text-gray-700">{linha.medico?.nome || grupo.medico.nome}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{unidadeNome(linha.unidade_id)}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{formatDate(linha.data_cirurgia)}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{linha.nome_paciente}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{linha.tipo_procedimento || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-900">{money(recebido)}</td>
-                          <td className="px-4 py-3 text-sm text-right text-teal-700">{money(repasse)}</td>
-                          <td className="px-4 py-3 text-sm text-right text-blue-700">{money(recebido - repasse)}</td>
-                        </tr>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
-              </tbody>
-              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
-                <tr>
-                  <td colSpan={5} className="px-4 py-3 text-sm font-bold text-gray-900">TOTAL GERAL</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{money(totalRecebido)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-teal-700">{money(totalRepasse)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(liquidoCasa)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </tbody>
+          <tfoot className="bg-gray-50 border-t-2">
+            <tr>
+              <td colSpan={5} className="px-4 py-3 text-sm font-bold">TOTAL GERAL</td>
+              <td className="px-4 py-3 text-sm text-right font-bold">{money(totalRecebido)}</td>
+              <td className="px-4 py-3 text-sm text-right font-bold text-teal-700">{money(totalRepasse)}</td>
+              <td className="px-4 py-3 text-sm text-right font-bold text-blue-700">{money(liquido)}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
