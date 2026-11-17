@@ -365,24 +365,45 @@ export const dbHelpers = {
     return { data, error };
   },
 
+  // Se o banco recusar uma coluna inexistente (schema desatualizado), remove-a e tenta de novo.
+  async insertWithSchemaRetry(table: string, row: Record<string, any>) {
+    let clean = Object.fromEntries(Object.entries(row).filter(([, v]) => v !== undefined));
+    for (let i = 0; i < 5; i++) {
+      const { data, error } = await supabase.from(table).insert([clean]).select();
+      if (!error) return { data, error };
+      const msg = String(error.message || '');
+      const col = msg.match(/column "([^"]+)" .*does not exist/i)?.[1]
+        ?? msg.match(/Could not find the '([^']+)' column/i)?.[1];
+      if (!col || !(col in clean)) return { data, error };
+      const { [col]: _removed, ...rest } = clean;
+      clean = rest;
+    }
+    return { data: null, error: { message: 'Não foi possível salvar após várias tentativas.' } };
+  },
+
+  async updateWithSchemaRetry(table: string, id: number, row: Record<string, any>) {
+    let clean = Object.fromEntries(Object.entries(row).filter(([, v]) => v !== undefined));
+    for (let i = 0; i < 5; i++) {
+      const { data, error } = await supabase.from(table).update(clean).eq('id', id).select();
+      if (!error) return { data, error };
+      const msg = String(error.message || '');
+      const col = msg.match(/column "([^"]+)" .*does not exist/i)?.[1]
+        ?? msg.match(/Could not find the '([^']+)' column/i)?.[1];
+      if (!col || !(col in clean)) return { data, error };
+      const { [col]: _removed, ...rest } = clean;
+      clean = rest;
+    }
+    return { data: null, error: { message: 'Não foi possível salvar após várias tentativas.' } };
+  },
+
   async createRepasseCirurgia(repasse: Omit<any, 'id' | 'created_at' | 'updated_at'>) {
-    const clean = Object.fromEntries(
-      Object.entries(repasse).filter(([_, v]) => v !== undefined)
-    );
-    const { data, error } = await supabase
-      .from('repasses_cirurgias')
-      .insert([clean])
-      .select();
-    return { data, error };
+    return dbHelpers.insertWithSchemaRetry('repasses_cirurgias', repasse);
   },
 
   async updateRepasseCirurgia(id: number, repasse: Omit<any, 'id' | 'created_at' | 'updated_at'>) {
-    const { data, error } = await supabase
-      .from('repasses_cirurgias')
-      .update({ ...repasse, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select();
-    return { data, error };
+    return dbHelpers.updateWithSchemaRetry('repasses_cirurgias', id, {
+      ...repasse, updated_at: new Date().toISOString(),
+    });
   },
 
   async deleteRepasseCirurgia(id: number) {
