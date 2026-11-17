@@ -149,6 +149,10 @@ export interface RepasseCirurgia {
   data_pagamento: string | null;
   month_reference: string;
   observacao: string | null;
+  // ---- colunas adicionadas via migração ----
+  desconto_fixo_clinica: number;
+  desconto_administrativo: number;
+  // -----------------------------------------
   created_at?: string;
   updated_at?: string;
   // joins
@@ -156,11 +160,22 @@ export interface RepasseCirurgia {
   convenio?: Convenio;
   hospital?: Hospital;
   cirurgia?: Cirurgia;
+  // aliases usados pelo componente (colunas reais da tabela)
+  valor_liquido?: number;
+  forma_pagamento?: string | null;
 }
 
 export type RepasseCirurgiaInput = Omit<
   RepasseCirurgia,
-  'id' | 'created_at' | 'updated_at' | 'medico' | 'convenio' | 'hospital' | 'cirurgia'
+  | 'id'
+  | 'created_at'
+  | 'updated_at'
+  | 'medico'
+  | 'convenio'
+  | 'hospital'
+  | 'cirurgia'
+  | 'valor_liquido'
+  | 'forma_pagamento'
 >;
 
 // ============================================================
