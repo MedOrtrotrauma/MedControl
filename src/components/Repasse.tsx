@@ -33,11 +33,47 @@ const months = () => Array.from({ length: 13 }, (_, index) => {
 });
 const numberValue = (value: string) => Math.max(0, Number(value.replace(',', '.')) || 0);
 
+/** Valor numérico do banco → texto do campo (zero vira vazio, para não atrapalhar a digitação) */
+const nz = (value: unknown) => (Number(value) ? String(value) : '');
+
+/** Limpa o que o usuário digita: só números e UMA vírgula (até 2 casas), sem zeros à esquerda */
+const sanitizeMoney = (raw: string) => {
+  let v = raw.replace(/[^\d.,]/g, '');
+  // "1.234,56" → pontos são milhar quando há vírgula; senão o ponto vira vírgula decimal
+  v = v.includes(',') ? v.replace(/\./g, '') : v.replace(/\./g, ',');
+  const i = v.indexOf(',');
+  if (i !== -1) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/,/g, '').slice(0, 2);
+  return v.replace(/^0+(?=\d)/, '');
+};
+
+/** Campo de valor: começa vazio (placeholder 0,00), seleciona tudo ao focar, aceita vírgula ou ponto */
+function MoneyInput({ value, onChange, required, placeholder = '0,00', className }: {
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      required={required}
+      className={className}
+      placeholder={placeholder}
+      value={value.replace('.', ',')}
+      onChange={(event) => onChange(sanitizeMoney(event.target.value))}
+      onFocus={(event) => event.target.select()}
+    />
+  );
+}
+
 const createForm = (month: string) => ({
   numero_atendimento: '', medico_id: '', hospital_id: '', nome_paciente: '', data_cirurgia: '', tipo: 'cirurgia' as 'consulta' | 'cirurgia',
-  valor: '', auxilio_1: '0', auxilio_2: '0', outras_deducoes: '0',
-  desconto_paciente: '0', desconto_cartao: '0', valor_recebido: '', percentual_terceiro: '60',
-  tipo_procedimento: '', quantidade: '1', forma_pagamento: 'convenio', valor_unitario: '', valor_glosa: '0',
+  valor: '', auxilio_1: '', auxilio_2: '', outras_deducoes: '',
+  desconto_paciente: '', desconto_cartao: '', valor_recebido: '', percentual_terceiro: '60',
+  tipo_procedimento: '', quantidade: '1', forma_pagamento: 'convenio', valor_unitario: '', valor_glosa: '',
   imposto_percentual: '12', observacao: '', month_reference: month, status_pagamento: 'pendente' as StatusPagamento,
   desc_adm: true, desc_chefe_faturamento: true, desc_faturista: true, desc_autorizacao: true,
   cirurgia_id: '', desconto_fixo_clinica: '12500',
@@ -99,12 +135,12 @@ export function RepasseComponent({ tipo }: Props) {
     setEditing(item);
     setForm({
       numero_atendimento: item.numero_atendimento || '', medico_id: String(item.medico_id), hospital_id: String(item.hospital_id), nome_paciente: item.nome_paciente,
-      data_cirurgia: item.data_cirurgia, tipo: item.tipo, valor: String(item.valor || 0), auxilio_1: String(item.auxilio_1 || 0),
-      auxilio_2: String(item.auxilio_2 || 0), outras_deducoes: String(item.outras_deducoes || 0),
-      desconto_paciente: String(item.desconto_paciente || 0), desconto_cartao: String(item.desconto_cartao || 0),
-      valor_recebido: String(item.valor_recebido || item.valor || 0), percentual_terceiro: String(item.percentual_terceiro || 0),
+      data_cirurgia: item.data_cirurgia, tipo: item.tipo, valor: nz(item.valor), auxilio_1: nz(item.auxilio_1),
+      auxilio_2: nz(item.auxilio_2), outras_deducoes: nz(item.outras_deducoes),
+      desconto_paciente: nz(item.desconto_paciente), desconto_cartao: nz(item.desconto_cartao),
+      valor_recebido: nz(item.valor_recebido || item.valor), percentual_terceiro: nz(item.percentual_terceiro),
       tipo_procedimento: item.tipo_procedimento || '', quantidade: String(item.quantidade || 1),
-      forma_pagamento: item.forma_pagamento || 'convenio', valor_unitario: String(item.valor_unitario || item.valor || 0), valor_glosa: String(item.valor_glosa || 0),
+      forma_pagamento: item.forma_pagamento || 'convenio', valor_unitario: nz(item.valor_unitario || item.valor), valor_glosa: nz(item.valor_glosa),
       imposto_percentual: String(item.imposto_percentual ?? 12), observacao: item.observacao || '',
       month_reference: item.month_reference || month, status_pagamento: item.status_pagamento || 'pendente',
       desc_adm: (item as any).desc_adm ?? true, desc_chefe_faturamento: (item as any).desc_chefe_faturamento ?? true, desc_faturista: (item as any).desc_faturista ?? true, desc_autorizacao: (item as any).desc_autorizacao ?? true,
@@ -391,8 +427,8 @@ export function RepasseComponent({ tipo }: Props) {
     {error && <div className="alert-error">{error}</div>}
     {showForm && !isReadOnly && <div className="modal-overlay" onClick={() => setShowForm(false)}><div className="modal-content" onClick={(e) => e.stopPropagation()}><div className="modal-header"><div><span className="eyebrow">{editing ? 'Editar lançamento' : 'Novo lançamento'}</span><h2>{title}</h2></div><button className="icon-button" onClick={() => setShowForm(false)}><X size={18} /></button></div><form className="form-grid" onSubmit={save}>
       <label>Mês de referência<select required value={form.month_reference} onChange={(event) => update('month_reference', event.target.value)}>{months().map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Médico<select required value={form.medico_id} onChange={(event) => update('medico_id', event.target.value)}><option value="">Selecione</option>{medicos.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Hospital / clínica<select required value={form.hospital_id} onChange={(event) => update('hospital_id', event.target.value)}><option value="">Selecione</option>{hospitais.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Paciente<input required value={form.nome_paciente} onChange={(event) => update('nome_paciente', event.target.value)} /></label><label>Data do atendimento<input required type="date" value={form.data_cirurgia} onChange={(event) => update('data_cirurgia', event.target.value)} /></label><label>Tipo<select value={form.tipo} onChange={(event) => update('tipo', event.target.value)}><option value="cirurgia">Cirurgia</option></select></label>
-      <label>Nº atendimento<input value={form.numero_atendimento} onChange={(event) => update('numero_atendimento', event.target.value)} placeholder="Opcional" /></label><label>Cirurgia<select value={form.cirurgia_id} onChange={(event) => update('cirurgia_id', event.target.value)}><option value="">Selecione</option>{cirurgias.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Procedimento<select value={form.tipo_procedimento} onChange={(event) => update('tipo_procedimento', event.target.value)}><option value="">Selecione</option>{procedimentos.map((item) => <option key={item.id} value={item.nome}>{item.nome}</option>)}</select></label><label>Forma de pagamento<select value={form.forma_pagamento} onChange={(event) => update('forma_pagamento', event.target.value)}><option value="convenio">Convênio</option><option value="pix">Pix</option><option value="credito">Crédito</option><option value="debito">Débito</option><option value="especie">Espécie</option></select></label><label>Quantidade<input min="1" type="number" value={form.quantidade} onChange={(event) => update('quantidade', event.target.value)} /></label><label>Valor bruto<input required min="0" step="0.01" type="number" value={form.valor} onChange={(event) => update('valor', event.target.value)} /></label>{tipo === 'terceiro' && <><label>Desc. paciente<input min="0" step="0.01" type="number" value={form.desconto_paciente} onChange={(event) => update('desconto_paciente', event.target.value)} /></label><label>Desc. cartão<input min="0" step="0.01" type="number" value={form.desconto_cartao} onChange={(event) => update('desconto_cartao', event.target.value)} /></label><label>Glosa<input min="0" step="0.01" type="number" value={form.valor_glosa} onChange={(event) => update('valor_glosa', event.target.value)} /></label></>}
-      {tipo === 'socio' ? <><label>1º auxílio (desconto)<input min="0" step="0.01" type="number" value={form.auxilio_1} onChange={(event) => update('auxilio_1', event.target.value)} /></label><label>2º auxílio (desconto)<input min="0" step="0.01" type="number" value={form.auxilio_2} onChange={(event) => update('auxilio_2', event.target.value)} /></label><label>Imposto (%)<input min="0" step="0.01" type="number" value={form.imposto_percentual} onChange={(event) => update('imposto_percentual', event.target.value)} /></label><label>Outras deduções<input min="0" step="0.01" type="number" value={form.outras_deducoes} onChange={(event) => update('outras_deducoes', event.target.value)} /></label><fieldset className="checkbox-group wide"><legend>Aplicar descontos</legend><label className="checkbox-label"><input type="checkbox" checked={form.desc_adm} onChange={(event) => update('desc_adm', event.target.checked)} /> Adm (1%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_chefe_faturamento} onChange={(event) => update('desc_chefe_faturamento', event.target.checked)} /> Chefe faturamento (0,75%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_faturista} onChange={(event) => update('desc_faturista', event.target.checked)} /> Faturista (0,5%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_autorizacao} onChange={(event) => update('desc_autorizacao', event.target.checked)} /> Autorização (0,25%)</label></fieldset><div className="checkbox-values wide"><div className="checkbox-value-item"><span>Adm (1%)</span><strong>{form.desc_adm ? money(calculations.descAdm || 0) : '—'}</strong></div><div className="checkbox-value-item"><span>Chefe fat. (0,75%)</span><strong>{form.desc_chefe_faturamento ? money(calculations.descChefe || 0) : '—'}</strong></div><div className="checkbox-value-item"><span>Faturista (0,5%)</span><strong>{form.desc_faturista ? money(calculations.descFaturista || 0) : '—'}</strong></div><div className="checkbox-value-item"><span>Autorização (0,25%)</span><strong>{form.desc_autorizacao ? money(calculations.descAutorizacao || 0) : '—'}</strong></div></div></> : <><label>Valor recebido<input min="0" step="0.01" type="number" value={form.valor_recebido} placeholder="Calculado pelo global" onChange={(event) => update('valor_recebido', event.target.value)} /></label><label>Repasse (%)<input required min="0" max="100" step="0.01" type="number" value={form.percentual_terceiro} onChange={(event) => update('percentual_terceiro', event.target.value)} /></label></>}
+      <label>Nº atendimento<input value={form.numero_atendimento} onChange={(event) => update('numero_atendimento', event.target.value)} placeholder="Opcional" /></label><label>Cirurgia<select value={form.cirurgia_id} onChange={(event) => update('cirurgia_id', event.target.value)}><option value="">Selecione</option>{cirurgias.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label><label>Procedimento<select value={form.tipo_procedimento} onChange={(event) => update('tipo_procedimento', event.target.value)}><option value="">Selecione</option>{procedimentos.map((item) => <option key={item.id} value={item.nome}>{item.nome}</option>)}</select></label><label>Forma de pagamento<select value={form.forma_pagamento} onChange={(event) => update('forma_pagamento', event.target.value)}><option value="convenio">Convênio</option><option value="pix">Pix</option><option value="credito">Crédito</option><option value="debito">Débito</option><option value="especie">Espécie</option></select></label><label>Quantidade<input min="1" type="number" value={form.quantidade} onFocus={(event) => event.target.select()} onChange={(event) => update('quantidade', event.target.value)} /></label><label>Valor bruto<MoneyInput required value={form.valor} onChange={(v) => update('valor', v)} /></label>{tipo === 'terceiro' && <><label>Desc. paciente<MoneyInput value={form.desconto_paciente} onChange={(v) => update('desconto_paciente', v)} /></label><label>Desc. cartão<MoneyInput value={form.desconto_cartao} onChange={(v) => update('desconto_cartao', v)} /></label><label>Glosa<MoneyInput value={form.valor_glosa} onChange={(v) => update('valor_glosa', v)} /></label></>}
+      {tipo === 'socio' ? <><label>1º auxílio (desconto)<MoneyInput value={form.auxilio_1} onChange={(v) => update('auxilio_1', v)} /></label><label>2º auxílio (desconto)<MoneyInput value={form.auxilio_2} onChange={(v) => update('auxilio_2', v)} /></label><label>Imposto (%)<MoneyInput value={form.imposto_percentual} placeholder="0" onChange={(v) => update('imposto_percentual', v)} /></label><label>Outras deduções<MoneyInput value={form.outras_deducoes} onChange={(v) => update('outras_deducoes', v)} /></label><fieldset className="checkbox-group wide"><legend>Aplicar descontos</legend><label className="checkbox-label"><input type="checkbox" checked={form.desc_adm} onChange={(event) => update('desc_adm', event.target.checked)} /> Adm (1%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_chefe_faturamento} onChange={(event) => update('desc_chefe_faturamento', event.target.checked)} /> Chefe faturamento (0,75%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_faturista} onChange={(event) => update('desc_faturista', event.target.checked)} /> Faturista (0,5%)</label><label className="checkbox-label"><input type="checkbox" checked={form.desc_autorizacao} onChange={(event) => update('desc_autorizacao', event.target.checked)} /> Autorização (0,25%)</label></fieldset><div className="checkbox-values wide"><div className="checkbox-value-item"><span>Adm (1%)</span><strong>{form.desc_adm ? money(calculations.descAdm || 0) : '—'}</strong></div><div className="checkbox-value-item"><span>Chefe fat. (0,75%)</span><strong>{form.desc_chefe_faturamento ? money(calculations.descChefe || 0) : '—'}</strong></div><div className="checkbox-value-item"><span>Faturista (0,5%)</span><strong>{form.desc_faturista ? money(calculations.descFaturista || 0) : '—'}</strong></div><div className="checkbox-value-item"><span>Autorização (0,25%)</span><strong>{form.desc_autorizacao ? money(calculations.descAutorizacao || 0) : '—'}</strong></div></div></> : <><label>Valor recebido<MoneyInput value={form.valor_recebido} placeholder="Calculado pelo global" onChange={(v) => update('valor_recebido', v)} /></label><label>Repasse (%)<MoneyInput required value={form.percentual_terceiro} placeholder="0" onChange={(v) => update('percentual_terceiro', v)} /></label></>}
       <label>Status<select value={form.status_pagamento} onChange={(event) => update('status_pagamento', event.target.value)}><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="pago">Pago</option></select></label><label className="wide">Observação<textarea rows={3} value={form.observacao} onChange={(event) => update('observacao', event.target.value)} placeholder="Referência ou observação do relatório" /></label><div className="calculation-card wide"><div><span>{tipo === 'socio' ? 'Valor de repasse calculado' : 'Repasse profissional calculado'}</span><strong>{money(calculations.repasse)}</strong></div><small>{tipo === 'socio' ? `Total ${money(calculations.total)}${calculations.auxilioTotal > 0 ? ` (após auxílios: -${money(calculations.auxilioTotal)})` : ''} - taxa 1,5% ${money(calculations.taxa)} - imposto ${money(calculations.imposto)} - descontos ${money(calculations.descontos || 0)}` : `Global ${money(calculations.global)} - recebido ${money(calculations.recebido)} - saldo ${money(calculations.saldo)}`}</small></div><div className="form-actions wide"><button type="button" className="button button-muted" onClick={() => setShowForm(false)}>Cancelar</button><button className="button button-primary" disabled={saving}>{saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Salvar lançamento'}</button></div>
     </form></div></div>}
 
@@ -415,7 +451,7 @@ export function RepasseComponent({ tipo }: Props) {
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-gray-700">Fixo Clínica (R$) *</span>
-                <input type="number" min="0" step="0.01" value={repasseFixoClinica} onChange={(e) => setRepasseFixoClinica(e.target.value)} className="w-full mt-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                <MoneyInput value={repasseFixoClinica} onChange={setRepasseFixoClinica} className="w-full mt-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </label>
               <div className="flex items-end">
                 <button className="button button-primary w-full" disabled={repasseLoading || !repasseMedicoId} onClick={buscarCirurgias}>
@@ -511,7 +547,11 @@ export function RepasseComponent({ tipo }: Props) {
       const auxilioTotal = Number(item.auxilio_1 || 0) + Number(item.auxilio_2 || 0);
       const impostoValor = tipo === 'socio' ? baseItem * Number(item.imposto_percentual || 0) / 100 : 0;
       const descontosValor = tipo === 'socio' ? (() => {
-        return (item as any).desc_adm === false ? 0 : baseItem * 0.01 + ((item as any).desc_chefe_faturamento === false ? 0 : baseItem * 0.0075) + ((item as any).desc_faturista === false ? 0 : baseItem * 0.005) + ((item as any).desc_autorizacao === false ? 0 : baseItem * 0.0025);
+        const f = item as any;
+        return (f.desc_adm === false ? 0 : baseItem * 0.01)
+          + (f.desc_chefe_faturamento === false ? 0 : baseItem * 0.0075)
+          + (f.desc_faturista === false ? 0 : baseItem * 0.005)
+          + (f.desc_autorizacao === false ? 0 : baseItem * 0.0025);
       })() : 0;
       const statusLabel = item.status_pagamento === 'pago' ? 'Pago' : item.status_pagamento === 'aprovado' ? 'Aprovado' : 'Pendente';
       const actions = isReadOnly ? <td></td> : <td><div className="row-actions"><button className="icon-button" onClick={() => openEdit(item)}><Pencil size={16} /></button><button className="icon-button danger" onClick={() => void remove(item.id)}><Trash2 size={16} /></button></div></td>;
