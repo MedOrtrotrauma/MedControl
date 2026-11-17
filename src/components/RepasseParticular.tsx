@@ -528,22 +528,6 @@ export function RepasseParticularComponent() {
                     </select>
                   </div>
                 )}
-
-                {form.is_split_payment && form.other_payment_method !== 'pix' && form.other_payment_method !== 'especie' && (
-                  <div className="rp-field">
-                    <label>Taxa do {PAYMENT_TAX_RATES[form.other_payment_method]?.label} (%)</label>
-                    <select value={form.other_payment_tax_rate} onChange={(e) => update('other_payment_tax_rate', e.target.value)}>
-                      {PAYMENT_TAX_RATES[form.other_payment_method]?.rates.map((r) => (
-                        <option key={r} value={r}>{r}%</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="rp-field">
-                  <label>Alíquota de imposto (ISS, etc) %</label>
-                  <input type="number" min="0" step="0.01" value={form.invoice_tax_rate} onChange={(e) => update('invoice_tax_rate', e.target.value)} placeholder="Ex: 5" />
-                </div>
               </div>
 
               {/* Cash settlement */}
