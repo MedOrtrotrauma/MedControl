@@ -4,7 +4,6 @@ import {
   Download, ArrowUpDown, Percent, Receipt, Wallet,
 } from 'lucide-react';
 import { dbHelpers } from '../lib/supabase';
-import { useAuth } from './Auth/AuthContext';
 import type { Cirurgia, Medico, Procedimento, Repasse, RepasseImagem } from '../types';
 
 /* ───────────── Formatadores ───────────── */
@@ -19,6 +18,10 @@ const monthLabel = (m: string) => {
   const names = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   return `${names[Number(mo) - 1] || mo}/${(y || '').slice(2)}`;
 };
+const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** Data local (YYYY-MM-DD) — evita o deslocamento de fuso do toISOString() */
+const isoLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const PALETTE = ['#4a2d6e', '#3a6b52', '#b8853e', '#b04545', '#2f6690', '#8a5a9e', '#6b8e23', '#c0762f', '#5f6b7a', '#a23b72'];
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -149,7 +152,9 @@ function Donut({ data, center, format = money }: { data: Slice[]; center: string
           acc += len;
           return el;
         })}
-        <text x="100" y="94" textAnchor="middle" className="bi-donut-sub">{active !== null ? data[active].label : 'Total'}</text>
+        <text x="100" y="94" textAnchor="middle" className="bi-donut-sub">
+          {active !== null ? truncate(data[active].label, 20) : 'Total'}
+        </text>
         <text x="100" y="114" textAnchor="middle" className="bi-donut-val">
           {active !== null ? pct((data[active].value / (total || 1)) * 100) : center}
         </text>
@@ -168,7 +173,8 @@ function Donut({ data, center, format = money }: { data: Slice[]; center: string
   );
 }
 
-/** Ranking horizontal com participação % e linha de acumulado (Pareto) */
+/** Ranking horizontal com participação % e linha de acumulado (Pareto).
+ *  O nome completo é sempre exibido (quebra de linha em vez de cortar). */
 function Ranking({ data, format = money, color = '#4a2d6e', pareto = false }: {
   data: Slice[]; format?: (v: number) => string; color?: string; pareto?: boolean;
 }) {
@@ -199,7 +205,7 @@ function Ranking({ data, format = money, color = '#4a2d6e', pareto = false }: {
   );
 }
 
-/** Colunas simples (dia da semana) com destaque do maior valor */
+/** Colunas simples (dia da semana / mês) com destaque do maior valor */
 function Columns({ data, format = money }: { data: Slice[]; format?: (v: number) => string }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
@@ -262,7 +268,6 @@ function Delta({ current, previous }: { current: number; previous: number }) {
 type SortKey = 'data' | 'medico' | 'paciente' | 'valor' | 'repasse';
 
 export function DashboardComponent() {
-  const { perfil: _perfil } = useAuth();
   const [repasses, setRepasses] = useState<Repasse[]>([]);
   const [medicos, setMedicos] = useState<Medico[]>([]);
   const [procedimentos, setProcedimentos] = useState<Procedimento[]>([]);
@@ -284,23 +289,30 @@ export function DashboardComponent() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [repRes, medRes, procRes, cirRes, imgRes] = await Promise.all([
-        dbHelpers.getRepassesForReport({ tipo: 'todos' }),
-        dbHelpers.getMedicos(),
-        dbHelpers.getProcedimentos(),
-        dbHelpers.getCirurgias(),
-        dbHelpers.getRepassesImagemAll(),
-      ]);
-      if (repRes.error) {
-        setError('Não foi possível carregar os dados.');
-      } else {
-        setRepasses((repRes.data as Repasse[]) || []);
-        setMedicos((medRes.data as Medico[]) || []);
-        setProcedimentos((procRes.data as Procedimento[]) || []);
-        setCirurgias((cirRes.data as Cirurgia[]) || []);
-        setImagem((imgRes.data as RepasseImagem[]) || []);
+      setError('');
+      try {
+        const [repRes, medRes, procRes, cirRes, imgRes] = await Promise.all([
+          dbHelpers.getRepassesForReport({ tipo: 'todos' }),
+          dbHelpers.getMedicos(),
+          dbHelpers.getProcedimentos(),
+          dbHelpers.getCirurgias(),
+          dbHelpers.getRepassesImagemAll(),
+        ]);
+        if (repRes.error) {
+          setError('Não foi possível carregar os dados.');
+        } else {
+          setRepasses((repRes.data as Repasse[]) || []);
+          setMedicos((medRes.data as Medico[]) || []);
+          setProcedimentos((procRes.data as Procedimento[]) || []);
+          setCirurgias((cirRes.data as Cirurgia[]) || []);
+          setImagem((imgRes.data as RepasseImagem[]) || []);
+          if (imgRes.error) setError('Os dados de imagem não puderam ser carregados.');
+        }
+      } catch {
+        setError('Falha de conexão ao carregar o dashboard.');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     void load();
   }, []);
@@ -435,35 +447,57 @@ export function DashboardComponent() {
     return { rows: top, cols, matrix };
   }, [calc, byMedico, monthly.keys]);
 
-  /* ── Imagem: ranking por médico, receita mensal e volume de exames ── */
-  const imagemPorMedico = useMemo<Slice[]>(() => {
+  /* ── Imagem: agora respeita os filtros de médico e período ── */
+  const imagemFiltrada = useMemo(() => imagem.filter((r) => {
+    const a = r as any;
+    const medicoId = String(a.medico_id ?? a.medico?.id ?? '');
+    const matchMedico = !filtroMedico || medicoId === filtroMedico;
+    const m = r.month_reference || '';
+    const matchInicio = !dataInicio || !m || m >= dataInicio.slice(0, 7);
+    const matchFim = !dataFim || !m || m <= dataFim.slice(0, 7);
+    return matchMedico && matchInicio && matchFim;
+  }), [imagem, filtroMedico, dataInicio, dataFim]);
+
+  const imagemPorMedico = useMemo(() => {
     const map = new Map<string, { total: number; qtd: number }>();
-    imagem.forEach((r) => {
+    imagemFiltrada.forEach((r) => {
       const nome = r.medico?.nome || 'Sem médico';
       const cur = map.get(nome) || { total: 0, qtd: 0 };
       cur.total += Number(r.total || 0);
       cur.qtd += 1;
       map.set(nome, cur);
     });
-    return Array.from(map.entries())
-      .map(([label, v]) => ({ label, value: v.total, qtd: v.qtd } as Slice & { qtd: number }))
-      .sort((a, b) => b.value - a.value);
-  }, [imagem]);
+    return Array.from(map.entries()).map(([label, v]) => ({ label, total: v.total, qtd: v.qtd }));
+  }, [imagemFiltrada]);
+
+  /** Ranking por faturamento (valor) */
+  const imagemRankValor = useMemo<Slice[]>(
+    () => imagemPorMedico.map((m) => ({ label: m.label, value: m.total })).sort((a, b) => b.value - a.value),
+    [imagemPorMedico],
+  );
+
+  /** Ranking por quantidade de lançamentos — nome COMPLETO, ordenado pela quantidade */
+  const imagemRankQtd = useMemo<Slice[]>(
+    () => imagemPorMedico.map((m) => ({ label: m.label, value: m.qtd })).sort((a, b) => b.value - a.value),
+    [imagemPorMedico],
+  );
 
   const imagemMensal = useMemo<Slice[]>(() => {
     const map = new Map<string, number>();
-    imagem.forEach((r) => {
+    imagemFiltrada.forEach((r) => {
       const m = r.month_reference || '';
+      if (!m) return;
       map.set(m, (map.get(m) || 0) + Number(r.total || 0));
     });
     return Array.from(map.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [imagem]);
+  }, [imagemFiltrada]);
 
   const imagemResumo = useMemo(() => {
-    const total = imagem.reduce((s, r) => s + Number(r.total || 0), 0);
-    const imposto = imagem.reduce((s, r) => s + Number(r.total || 0) * Number(r.imposto_percentual || 0) / 100, 0);
-    return { total, imposto, liquido: total - imposto, exames: imagem.length };
-  }, [imagem]);
+    const total = imagemFiltrada.reduce((s, r) => s + Number(r.total || 0), 0);
+    const imposto = imagemFiltrada.reduce((s, r) => s + Number(r.total || 0) * Number(r.imposto_percentual || 0) / 100, 0);
+    const exames = imagemFiltrada.length;
+    return { total, imposto, liquido: total - imposto, exames, ticket: exames ? total / exames : 0 };
+  }, [imagemFiltrada]);
 
   /* Tabela: ordenação + paginação */
   const tableRows = useMemo(() => {
@@ -499,18 +533,17 @@ export function DashboardComponent() {
     const blob = new Blob(['\ufeff' + [head.map(esc).join(';'), ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `dashboard-lancamentos-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    a.href = url; a.download = `dashboard-lancamentos-${isoLocal(new Date())}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
 
-  /* Períodos rápidos */
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  /* Períodos rápidos (datas locais, sem deslocamento de fuso) */
   const setPeriodo = (meses: number | 'ano' | 'tudo') => {
     const hoje = new Date();
     if (meses === 'tudo') { setDataInicio(''); setDataFim(''); return; }
-    if (meses === 'ano') { setDataInicio(`${hoje.getFullYear()}-01-01`); setDataFim(iso(hoje)); return; }
+    if (meses === 'ano') { setDataInicio(`${hoje.getFullYear()}-01-01`); setDataFim(isoLocal(hoje)); return; }
     const ini = new Date(hoje.getFullYear(), hoje.getMonth() - (meses - 1), 1);
-    setDataInicio(iso(ini)); setDataFim(iso(hoje));
+    setDataInicio(isoLocal(ini)); setDataFim(isoLocal(hoje));
   };
 
   const limparFiltros = () => {
@@ -518,9 +551,12 @@ export function DashboardComponent() {
   };
   const hasFilters = filtroMedico || filtroCirurgia || filtroProcedimento || filtroTipo || dataInicio || dataFim;
 
-  const Th = ({ k, children, right }: { k: SortKey; children: React.ReactNode; right?: boolean }) => (
+  const sortIcon = (k: SortKey) => (
+    <ArrowUpDown size={12} style={{ opacity: sortKey === k ? 1 : 0.35, verticalAlign: 'middle' }} />
+  );
+  const thSort = (k: SortKey, label: string, right?: boolean) => (
     <th style={{ cursor: 'pointer', textAlign: right ? 'right' : 'left' }} onClick={() => toggleSort(k)}>
-      {children} <ArrowUpDown size={12} style={{ opacity: sortKey === k ? 1 : 0.35, verticalAlign: 'middle' }} />
+      {label} {sortIcon(k)}
     </th>
   );
 
@@ -587,7 +623,7 @@ export function DashboardComponent() {
         </div>
         <div className="summary-card summary-amber">
           <span>Total descontos</span><strong>{money(stats.totalDescontos)}</strong>
-          <small>Adm 1% · Chefe 0,75% · Faturista 0,5%</small><Receipt />
+          <small>{pct(stats.taxaDesconto)} do bruto · Adm 1% · Chefe 0,75% · Faturista 0,5%</small><Receipt />
         </div>
       </section>
 
@@ -664,12 +700,13 @@ export function DashboardComponent() {
                 <div><span>Total faturado</span><strong>{money(imagemResumo.total)}</strong></div>
                 <div><span>Impostos</span><strong>{money(imagemResumo.imposto)}</strong></div>
                 <div><span>Líquido</span><strong>{money(imagemResumo.liquido)}</strong></div>
+                <div><span>Ticket médio / exame</span><strong>{money(imagemResumo.ticket)}</strong></div>
               </div>
             </div>
             <div className="chart-panel">
-              <div className="chart-header"><Users size={18} /><h3>Imagem — ranking por médico</h3></div>
-              {imagemPorMedico.length > 0 ? (
-                <Ranking data={imagemPorMedico} color="#2f6690" />
+              <div className="chart-header"><Users size={18} /><h3>Imagem — ranking por médico (faturamento)</h3></div>
+              {imagemRankValor.length > 0 ? (
+                <Ranking data={imagemRankValor} color="#2f6690" />
               ) : <div className="empty-state">Sem dados de imagem</div>}
             </div>
           </div>
@@ -683,8 +720,8 @@ export function DashboardComponent() {
             </div>
             <div className="chart-panel">
               <div className="chart-header"><Receipt size={18} /><h3>Imagem — quantidade de lançamentos por médico</h3></div>
-              {imagemPorMedico.length > 0 ? (
-                <Columns data={imagemPorMedico.map((m) => ({ label: m.label.split(' ')[0], value: (m as Slice & { qtd: number }).qtd }))} format={(v) => `${v}`} />
+              {imagemRankQtd.length > 0 ? (
+                <Ranking data={imagemRankQtd} format={(v) => `${v}`} color="#2f6690" />
               ) : <div className="empty-state">Sem dados de imagem</div>}
             </div>
           </div>
@@ -698,9 +735,9 @@ export function DashboardComponent() {
               <table>
                 <thead>
                   <tr>
-                    <Th k="data">Data</Th><Th k="medico">Médico</Th><Th k="paciente">Paciente</Th>
+                    {thSort('data', 'Data')}{thSort('medico', 'Médico')}{thSort('paciente', 'Paciente')}
                     <th>Cirurgia</th><th>Procedimento</th>
-                    <Th k="valor" right>Valor</Th><th style={{ textAlign: 'right' }}>Imposto</th><th style={{ textAlign: 'right' }}>Descontos</th><th style={{ textAlign: 'right' }}>Fixo clínica</th><Th k="repasse" right>Repasse</Th>
+                    {thSort('valor', 'Valor', true)}<th style={{ textAlign: 'right' }}>Imposto</th><th style={{ textAlign: 'right' }}>Descontos</th><th style={{ textAlign: 'right' }}>Fixo clínica</th>{thSort('repasse', 'Repasse', true)}
                   </tr>
                 </thead>
                 <tbody>
@@ -762,15 +799,15 @@ const BI_CSS = `
 .bi-rank-row{display:flex;gap:10px;align-items:flex-start}
 .bi-rank-pos{width:22px;height:22px;border-radius:50%;background:#f1edf6;color:#4a2d6e;font-size:12px;font-weight:700;display:grid;place-items:center;flex:none;margin-top:2px}
 .bi-rank-body{flex:1;min-width:0}
-.bi-rank-top{display:flex;justify-content:space-between;gap:8px;font-size:13px}
-.bi-rank-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-.bi-rank-val{white-space:nowrap}
+.bi-rank-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:13px}
+.bi-rank-label{flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.25;font-weight:600}
+.bi-rank-val{white-space:nowrap;flex:none}
 .bi-rank-val em{font-style:normal;color:#7a7285;margin-left:6px}
 .bi-rank-track{height:8px;background:#f1edf6;border-radius:999px;overflow:hidden;margin-top:4px}
 .bi-rank-fill{height:100%;border-radius:999px}
 .bi-rank-acc{font-size:11px;color:#9a93a6;margin-top:2px}
 .bi-cols{display:flex;gap:10px;align-items:flex-end;height:230px}
-.bi-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;gap:4px}
+.bi-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;gap:4px;min-width:0}
 .bi-col-track{flex:1;width:100%;display:flex;align-items:flex-end;background:#f6f4f8;border-radius:8px;overflow:hidden}
 .bi-col-fill{width:100%;border-radius:8px 8px 0 0;min-height:2px}
 .bi-col-val{font-size:11px;color:#5d5568;height:14px}
@@ -785,6 +822,7 @@ const BI_CSS = `
 .bi-pager{display:flex;justify-content:center;align-items:center;gap:14px;padding:12px;font-size:13px}
 .bi-img-resumo{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .bi-img-resumo>div{background:#f6f4f8;border-radius:10px;padding:14px 16px}
+.bi-img-resumo>div:last-child:nth-child(odd){grid-column:1/-1}
 .bi-img-resumo span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a7285}
 .bi-img-resumo strong{font-size:18px;color:#2b2236}
 `;
