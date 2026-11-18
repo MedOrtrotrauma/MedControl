@@ -26,6 +26,7 @@ import type {
   Medico,
   Procedimento,
   RepasseCirurgia,
+  RepasseControle,
   StatusPagamento,
 } from '../types';
 
@@ -151,9 +152,14 @@ export function RepasseComponent({ tipo }: Props) {
   const [showRepasseModal, setShowRepasseModal] = useState(false);
   const [repasseMedicoId, setRepasseMedicoId] = useState('');
   const [repasseFixoClinica, setRepasseFixoClinica] = useState('12500');
+  const [cobrarFixo, setCobrarFixo] = useState(true);
+  const [tipoRepasse, setTipoRepasse] = useState<'total' | 'parcial'>('total');
+  const [valorParcial, setValorParcial] = useState('');
   const [repasseLoading, setRepasseLoading] = useState(false);
   const [repasseCirurgias, setRepasseCirurgias] = useState<RepasseCirurgia[]>([]);
   const [repasseRealizado, setRepasseRealizado] = useState(false);
+  const [saldoAnterior, setSaldoAnterior] = useState(0);
+  const [controlesMedico, setControlesMedico] = useState<RepasseControle[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -382,8 +388,13 @@ export function RepasseComponent({ tipo }: Props) {
   const openRepasseModal = () => {
     setRepasseMedicoId('');
     setRepasseFixoClinica('12500');
+    setCobrarFixo(true);
+    setTipoRepasse('total');
+    setValorParcial('');
     setRepasseCirurgias([]);
     setRepasseRealizado(false);
+    setSaldoAnterior(0);
+    setControlesMedico([]);
     setShowRepasseModal(true);
   };
 
@@ -393,7 +404,10 @@ export function RepasseComponent({ tipo }: Props) {
       return;
     }
     setRepasseLoading(true);
-    const result = await dbHelpers.getRepasseCirurgiasByMonthAndTipo(month, tipo);
+    const [result, ctrlRes] = await Promise.all([
+      dbHelpers.getRepasseCirurgiasByMonthAndTipo(month, tipo),
+      dbHelpers.getRepasseControles(Number(repasseMedicoId)),
+    ]);
     if (result.error) {
       alert('Erro ao buscar cirurgias.');
       setRepasseLoading(false);
@@ -401,24 +415,30 @@ export function RepasseComponent({ tipo }: Props) {
     }
     const allRepasses = (result.data as RepasseCirurgia[]) || [];
     setRepasseCirurgias(allRepasses.filter((r) => String(r.medico_id) === repasseMedicoId));
+    // Saldo remanescente = soma dos saldos de todos os repasses anteriores (meses anteriores)
+    const controles = (ctrlRes.data as RepasseControle[]) || [];
+    setControlesMedico(controles);
+    const saldos = controles
+      .filter((ctrl) => ctrl.month_reference < month)
+      .reduce((sum, ctrl) => sum + Number(ctrl.saldo_remanescente || 0), 0);
+    setSaldoAnterior(saldos);
     setRepasseLoading(false);
   };
 
-  /** Cálculo do repasse agregado de um médico (sócio) */
-  const calcCirurgiaSocio = (c: RepasseCirurgia, fixoClinica: number) => {
+  /** Cálculo por lançamento (sócio) — SEM fixo clínica (ele entra uma única vez no mês) */
+  const calcCirurgiaSocio = (c: RepasseCirurgia, _fixoClinica: number = 0) => {
     const base =
       Number(c.valor || 0) - Number(c.auxilio_1 || 0) - Number(c.auxilio_2 || 0);
     const taxa = base * 0.015;
     const imposto = (base * Number(c.imposto_percentual || 0)) / 100;
     const descAdmin = Number(c.desconto_administrativo || 0);
-    const descFixo = fixoClinica || Number(c.desconto_fixo_clinica || 0);
     const outras = Number(c.outras_deducoes || 0);
-    const liquido = Math.max(0, base - taxa - imposto - descAdmin - descFixo - outras);
-    return { base, taxa, imposto, descAdmin, descFixo, outras, liquido };
+    const liquido = Math.max(0, base - taxa - imposto - descAdmin - outras);
+    return { base, taxa, imposto, descAdmin, descFixo: 0, outras, liquido };
   };
 
   const repasseCalculations = useMemo(() => {
-    const fixoClinica = numberValue(repasseFixoClinica);
+    const fixoClinica = cobrarFixo ? numberValue(repasseFixoClinica) : 0;
     let totalBruto = 0,
       totalAux1 = 0,
       totalAux2 = 0,
@@ -428,7 +448,7 @@ export function RepasseComponent({ tipo }: Props) {
       totalDescAdmin = 0,
       totalOutras = 0;
     for (const c of repasseCirurgias) {
-      const r = calcCirurgiaSocio(c, fixoClinica);
+      const r = calcCirurgiaSocio(c);
       totalBruto += Number(c.valor || 0);
       totalAux1 += Number(c.auxilio_1 || 0);
       totalAux2 += Number(c.auxilio_2 || 0);
@@ -438,10 +458,17 @@ export function RepasseComponent({ tipo }: Props) {
       totalDescAdmin += r.descAdmin;
       totalOutras += r.outras;
     }
-    const liquido = Math.max(
+    // Saldo de repasses anteriores remanescente entra como dedução
+    const liquidoAntesSaldo = Math.max(
       0,
       totalBase - totalTaxa - totalImposto - totalDescAdmin - fixoClinica - totalOutras,
     );
+    const liquido = Math.max(0, liquidoAntesSaldo - saldoAnterior);
+    const valorPago =
+      tipoRepasse === 'total'
+        ? liquido
+        : Math.min(liquido, numberValue(valorParcial));
+    const saldoNovo = liquido - valorPago;
     return {
       fixoClinica,
       totalBruto,
@@ -452,27 +479,65 @@ export function RepasseComponent({ tipo }: Props) {
       totalImposto,
       totalDescAdmin,
       totalOutras,
+      liquidoAntesSaldo,
       liquido,
+      valorPago,
+      saldoNovo,
     };
-  }, [repasseCirurgias, repasseFixoClinica]);
+  }, [repasseCirurgias, repasseFixoClinica, cobrarFixo, saldoAnterior, tipoRepasse, valorParcial]);
 
   const confirmarRepasse = async () => {
     if (repasseCirurgias.length === 0) {
       alert('Nenhuma cirurgia encontrada para este médico no período.');
       return;
     }
+    if (
+      tipoRepasse === 'parcial' &&
+      numberValue(valorParcial) <= 0 &&
+      repasseCalculations.liquido > 0
+    ) {
+      alert('Informe o valor do repasse parcial.');
+      return;
+    }
     setRepasseLoading(true);
-    const fixoClinica = numberValue(repasseFixoClinica);
+    const fixoClinica = repasseCalculations.fixoClinica;
+    // O fixo da clínica é rateado entre os lançamentos apenas para registro visual,
+    // mas cobrado uma única vez no mês (soma dos lançamentos = 1x fixo).
+    const fixoPorLancamento =
+      repasseCirurgias.length > 0 ? fixoClinica / repasseCirurgias.length : 0;
     for (const cirurgiaItem of repasseCirurgias) {
-      const r = calcCirurgiaSocio(cirurgiaItem, fixoClinica);
+      const r = calcCirurgiaSocio(cirurgiaItem);
+      const valorLiquidoLanc = Math.max(0, r.liquido - fixoPorLancamento);
       const payload = {
-        desconto_fixo_clinica: fixoClinica,
-        valor_liquido: r.liquido,
-        valor_repasse_medico: r.liquido,
-        status_pagamento: 'pago' as StatusPagamento,
-        data_pagamento: new Date().toISOString().slice(0, 10),
+        desconto_fixo_clinica: fixoPorLancamento,
+        valor_liquido: valorLiquidoLanc,
+        valor_repasse_medico: valorLiquidoLanc,
       };
       await dbHelpers.updateRepasseCirurgia(cirurgiaItem.id, payload);
+    }
+    const isParcial = tipoRepasse === 'parcial';
+    await dbHelpers.createRepasseControle({
+      medico_id: Number(repasseMedicoId),
+      month_reference: month,
+      cobrar_fixo: cobrarFixo,
+      valor_fixo_clinica: fixoClinica,
+      tipo_repasse: tipoRepasse,
+      valor_bruto_calculado: repasseCalculations.liquido,
+      valor_pago: repasseCalculations.valorPago,
+      saldo_remanescente: repasseCalculations.saldoNovo,
+      observacao: isParcial
+        ? `Repasse parcial de ${monthLabel(month)}${saldoAnterior > 0 ? ' — descontado saldo anterior de ' + money(saldoAnterior) : ''}`
+        : null,
+      data_repasse: new Date().toISOString().slice(0, 10),
+    });
+    // Ao repassar tudo, os lançamentos do mês são marcados como pagos
+    if (!isParcial) {
+      for (const cirurgiaItem of repasseCirurgias) {
+        await dbHelpers.updateRepasseCirurgia(cirurgiaItem.id, {
+          status_pagamento: 'pago' as StatusPagamento,
+          data_pagamento: new Date().toISOString().slice(0, 10),
+        });
+      }
     }
     setRepasseRealizado(true);
     setRepasseLoading(false);
@@ -1152,6 +1217,14 @@ export function RepasseComponent({ tipo }: Props) {
                     onChange={setRepasseFixoClinica}
                     className="w-full mt-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
+                  <span className="flex items-center gap-2 mt-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={cobrarFixo}
+                      onChange={(e) => setCobrarFixo(e.target.checked)}
+                    />
+                    Cobrar taxa fixa neste repasse (cobrada uma única vez no mês)
+                  </span>
                 </label>
                 <div className="flex items-end">
                   <button
@@ -1163,6 +1236,22 @@ export function RepasseComponent({ tipo }: Props) {
                   </button>
                 </div>
               </div>
+
+              {saldoAnterior > 0 && repasseMedicoId && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                  Saldo remanescente de repasses anteriores: <strong>{money(saldoAnterior)}</strong>{' '}
+                  (será descontado deste repasse).
+                  {controlesMedico.filter((c) => c.month_reference < month && Number(c.saldo_remanescente) > 0).length > 0 && (
+                    <span>
+                      {' '}Origem:{' '}
+                      {controlesMedico
+                        .filter((c) => c.month_reference < month && Number(c.saldo_remanescente) > 0)
+                        .map((c) => `${monthLabel(c.month_reference)}: ${money(Number(c.saldo_remanescente))}`)
+                        .join(' · ')}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {repasseCirurgias.length > 0 && (
                 <>
@@ -1194,7 +1283,7 @@ export function RepasseComponent({ tipo }: Props) {
                               Base
                             </th>
                             <th className="px-3 py-2 text-right font-semibold text-gray-700">
-                              Líquido
+                              Líquido (s/ fixo)
                             </th>
                           </tr>
                         </thead>
@@ -1258,18 +1347,85 @@ export function RepasseComponent({ tipo }: Props) {
                       <strong>-{money(repasseCalculations.totalDescAdmin)}</strong>
                     </div>
                     <div className="flex justify-between text-sm text-red-600">
-                      <span>Fixo Clínica:</span>
-                      <strong>-{money(repasseCalculations.fixoClinica)}</strong>
+                      <span>Fixo Clínica (único no mês):</span>
+                      <strong>
+                        {cobrarFixo ? `-${money(repasseCalculations.fixoClinica)}` : '—'}
+                      </strong>
                     </div>
                     <div className="flex justify-between text-sm text-red-600">
                       <span>Outras deduções:</span>
                       <strong>-{money(repasseCalculations.totalOutras)}</strong>
                     </div>
+                    {saldoAnterior > 0 && (
+                      <div className="flex justify-between text-sm text-red-600">
+                        <span>Saldo de meses anteriores:</span>
+                        <strong>-{money(saldoAnterior)}</strong>
+                      </div>
+                    )}
                     <div className="flex justify-between text-lg border-t border-blue-200 pt-2">
                       <span className="font-bold">Repasse Líquido Total:</span>
                       <strong className="text-green-700">
                         {money(repasseCalculations.liquido)}
                       </strong>
+                    </div>
+
+                    <div className="border-t border-blue-200 pt-3 mt-3">
+                      <fieldset className="checkbox-group">
+                        <legend className="text-sm font-semibold text-gray-700 mb-2">
+                          Tipo de repasse
+                        </legend>
+                        <div className="flex gap-4 mb-3">
+                          <label className="checkbox-label">
+                            <input
+                              type="radio"
+                              name="tipo_repasse"
+                              checked={tipoRepasse === 'total'}
+                              onChange={() => setTipoRepasse('total')}
+                            />
+                            Valor total
+                          </label>
+                          <label className="checkbox-label">
+                            <input
+                              type="radio"
+                              name="tipo_repasse"
+                              checked={tipoRepasse === 'parcial'}
+                              onChange={() => setTipoRepasse('parcial')}
+                            />
+                            Valor parcial
+                          </label>
+                        </div>
+                        {tipoRepasse === 'parcial' && (
+                          <div className="max-w-xs">
+                            <span className="text-sm font-medium text-gray-700">
+                              Valor a pagar agora (R$)
+                            </span>
+                            <MoneyInput
+                              value={valorParcial}
+                              onChange={setValorParcial}
+                              className="w-full mt-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                            <small className="text-xs text-gray-500">
+                              O restante fica de saldo para este mês e pode ser pago depois.
+                            </small>
+                          </div>
+                        )}
+                      </fieldset>
+                      {tipoRepasse === 'parcial' && (
+                        <div className="mt-3 space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>Valor a pagar agora:</span>
+                            <strong className="text-green-700">
+                              {money(repasseCalculations.valorPago)}
+                            </strong>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Saldo que ficará para este mês:</span>
+                            <strong className="text-amber-700">
+                              {money(repasseCalculations.saldoNovo)}
+                            </strong>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 

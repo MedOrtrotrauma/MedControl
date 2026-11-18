@@ -429,6 +429,50 @@ export const dbHelpers = {
   },
 
   // ============================================================
+  // REPASSE CONTROLES (taxa fixa única por mês + total/parcial + saldo)
+  // ============================================================
+  async getRepasseControles(medicoId?: number) {
+    let q = supabase
+      .from('repasse_controles')
+      .select('*')
+      .order('month_reference', { ascending: false });
+    if (medicoId) q = q.eq('medico_id', medicoId);
+    const { data, error } = await q;
+    return { data, error };
+  },
+
+  async createRepasseControle(controle: Record<string, any>) {
+    return supabase.from('repasse_controles').insert(controle).select();
+  },
+
+  async updateRepasseControle(id: number, controle: Record<string, any>) {
+    return supabase.from('repasse_controles').update(controle).eq('id', id).select();
+  },
+
+  // ============================================================
+  // RELATÓRIO DE CIRURGIAS (extração com filtros)
+  // ============================================================
+  async getCirurgiasForReport(filters: {
+    medico?: string;
+    cirurgia?: string;
+    dataInicio?: string;
+    dataFim?: string;
+    status?: string;
+  }) {
+    let q = supabase
+      .from('repasses_cirurgias')
+      .select(`*, medico:medicos(*), convenio:convenios(*), hospital:hospitais(*), cirurgia:cirurgias(*)`)
+      .order('data_cirurgia', { ascending: false });
+    if (filters.medico) q = q.eq('medico_id', Number(filters.medico));
+    if (filters.cirurgia) q = q.eq('cirurgia_id', Number(filters.cirurgia));
+    if (filters.dataInicio) q = q.gte('data_cirurgia', filters.dataInicio);
+    if (filters.dataFim) q = q.lte('data_cirurgia', filters.dataFim);
+    if (filters.status && filters.status !== 'todos') q = q.eq('status_pagamento', filters.status);
+    const { data, error } = await q;
+    return { data, error };
+  },
+
+  // ============================================================
   // REPASSES IMAGEM  (inalterado)
   // ============================================================
   async getRepassesImagemAll() {

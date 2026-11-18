@@ -66,6 +66,21 @@ export interface ProducaoMensal {
 export type DestinatarioTipo = 'terceiro' | 'socio';
 export type StatusPagamento = 'pendente' | 'aprovado' | 'pago';
 
+export interface RepasseControle {
+  id: number;
+  medico_id: number;
+  month_reference: string;
+  cobrar_fixo: boolean;
+  valor_fixo_clinica: number;
+  tipo_repasse: 'total' | 'parcial';
+  valor_bruto_calculado: number;
+  valor_pago: number;
+  saldo_remanescente: number;
+  observacao?: string;
+  data_repasse: string;
+  created_at?: string;
+}
+
 export interface Repasse {
   id: number;
   medico_id: number;

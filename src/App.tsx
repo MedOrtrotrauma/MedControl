@@ -24,6 +24,7 @@ import { ProducaoMensalComponent } from './components/ProducaoMensal';
 import { RepasseParticularComponent } from './components/RepasseParticular';
 import { ImagemComponent } from './components/Imagem';
 import { RelatoriosComponent } from './components/Relatorios';
+import { CirurgiasExtracaoReport } from './components/Reports/CirurgiasExtracaoReport';
 import { DashboardComponent } from './components/Dashboard';
 import { MedicosCadastro } from './components/Cadastros/MedicosCadastro';
 import { ConveniosCadastro } from './components/Cadastros/ConveniosCadastro';
@@ -37,7 +38,7 @@ import { LoginForm } from './components/Auth/LoginForm';
 import { FinanceiroComponent } from './components/Financeiro';
 import type { TipoUsuario } from './components/Auth/AuthContext';
 
-type Page = 'dashboard' | 'repasse_socios' | 'repasse_particulares' | 'imagem' | 'particulares' | 'relatorios' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
+type Page = 'dashboard' | 'repasse_socios' | 'repasse_particulares' | 'imagem' | 'particulares' | 'relatorios' | 'relatorio_cirurgias' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
 
 interface MenuItem { id: Page; label: string; icon: typeof BarChart3; }
 interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; roles: TipoUsuario[]; }
@@ -60,7 +61,10 @@ const menuGroups: MenuGroup[] = [
   },
   {
     label: 'Relatórios', icon: FileText, roles: ['administrativo'],
-    items: [{ id: 'relatorios', label: 'Relatório de repasses', icon: FileText }],
+    items: [
+      { id: 'relatorios', label: 'Relatório de repasses', icon: FileText },
+      { id: 'relatorio_cirurgias', label: 'Extração de cirurgias', icon: Scissors },
+    ],
   },
   {
     label: 'Cadastros', icon: Settings2, roles: ['administrativo'],
@@ -81,6 +85,7 @@ const pageTitles: Record<Page, string> = {
   repasse_socios: 'Repasses cirurgias',
   repasse_particulares: 'Repasse particular',
   relatorios: 'Relatório de repasses',
+  relatorio_cirurgias: 'Extração de dados de cirurgias',
   medicos: 'Médicos',
   convenios: 'Convênios',
   hospitais: 'Hospitais e clínicas',
@@ -137,6 +142,7 @@ function AppContent() {
       case 'imagem': return <ImagemComponent />;
       case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'relatorios': return <RelatoriosComponent />;
+      case 'relatorio_cirurgias': return <CirurgiasExtracaoReport />;
       case 'medicos': return <MedicosCadastro />;
       case 'convenios': return <ConveniosCadastro />;
       case 'hospitais': return <HospitaisCadastro />;
