@@ -274,9 +274,53 @@ CREATE TABLE public.repasses_cirurgias (
   observacao text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  valor_liquido numeric NOT NULL DEFAULT 0,
+  forma_pagamento text CHECK (forma_pagamento = ANY (ARRAY['convenio'::text, 'pix'::text, 'credito'::text, 'debito'::text, 'especie'::text])),
+  desconto_fixo_clinica numeric NOT NULL DEFAULT 0,
+  desconto_administrativo numeric NOT NULL DEFAULT 0,
   CONSTRAINT repasses_cirurgias_pkey PRIMARY KEY (id),
   CONSTRAINT repasses_cirurgias_medico_id_fkey FOREIGN KEY (medico_id) REFERENCES public.medicos(id),
   CONSTRAINT repasses_cirurgias_convenio_id_fkey FOREIGN KEY (convenio_id) REFERENCES public.convenios(id),
   CONSTRAINT repasses_cirurgias_hospital_id_fkey FOREIGN KEY (hospital_id) REFERENCES public.hospitais(id),
   CONSTRAINT repasses_cirurgias_cirurgia_id_fkey FOREIGN KEY (cirurgia_id) REFERENCES public.cirurgias(id)
+);
+CREATE TABLE public.finance_categories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL CHECK (length(TRIM(BOTH FROM name)) > 0),
+  type text NOT NULL DEFAULT 'expense'::text CHECK (type = ANY (ARRAY['expense'::text, 'income'::text])),
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT finance_categories_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.finance_subcategories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  category_id uuid NOT NULL,
+  name text NOT NULL CHECK (length(TRIM(BOTH FROM name)) > 0),
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT finance_subcategories_pkey PRIMARY KEY (id),
+  CONSTRAINT finance_subcategories_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.finance_categories(id)
+);
+CREATE TABLE public.finance_bills (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  description text NOT NULL CHECK (length(TRIM(BOTH FROM description)) > 0),
+  type text NOT NULL DEFAULT 'expense'::text CHECK (type = ANY (ARRAY['expense'::text, 'income'::text])),
+  category_id uuid,
+  subcategory_id uuid,
+  amount numeric NOT NULL CHECK (amount >= 0::numeric),
+  origin text,
+  due_date date,
+  payment_date date,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'paid'::text])),
+  month_ref smallint NOT NULL CHECK (month_ref >= 1 AND month_ref <= 12),
+  year_ref smallint NOT NULL CHECK (year_ref >= 2000 AND year_ref <= 2200),
+  recurring boolean NOT NULL DEFAULT false,
+  notes text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT finance_bills_pkey PRIMARY KEY (id),
+  CONSTRAINT finance_bills_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.finance_categories(id),
+  CONSTRAINT finance_bills_subcategory_id_fkey FOREIGN KEY (subcategory_id) REFERENCES public.finance_subcategories(id)
 );
