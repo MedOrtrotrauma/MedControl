@@ -26,6 +26,7 @@ interface FormData {
   patient_name: string;
   procedure_type: string;
   gross_value: string;
+  valor_clinica: string;
   payment_method: string;
   payment_tax_rate: string;
   invoice_tax_rate: string;
@@ -49,6 +50,7 @@ const initialForm = (month: string): FormData => ({
   patient_name: '',
   procedure_type: '',
   gross_value: '',
+  valor_clinica: '',
   payment_method: 'pix',
   payment_tax_rate: '0',
   invoice_tax_rate: '5',
@@ -139,6 +141,7 @@ export function RepasseParticularComponent() {
 
   const calc = useMemo(() => {
     const gross = parseMoney(form.gross_value);
+    const valorClinica = parseMoney(form.valor_clinica);
     const isSplit = form.is_split_payment && parseMoney(form.cash_amount) > 0 && parseMoney(form.cash_amount) < gross;
     const effectiveMethod = isSplit ? form.other_payment_method : form.payment_method;
     const effectiveTaxRate = isSplit ? Number(form.other_payment_tax_rate) || 0 : Number(form.payment_tax_rate) || 0;
@@ -151,7 +154,7 @@ export function RepasseParticularComponent() {
     const totalDeductions = paymentTaxAmount + invoiceTaxAmount + medCost + supCost + othCost;
     const netClinic = gross - totalDeductions;
     const cashAmount = isSplit ? parseMoney(form.cash_amount) : (form.payment_method === 'especie' ? gross : 0);
-    return { gross, isSplit, effectiveMethod, effectiveTaxRate, paymentTaxAmount, invoiceTaxAmount, medCost, supCost, othCost, totalDeductions, netClinic, cashAmount };
+    return { gross, valorClinica, valorRepasse: gross - valorClinica, isSplit, effectiveMethod, effectiveTaxRate, paymentTaxAmount, invoiceTaxAmount, medCost, supCost, othCost, totalDeductions, netClinic, cashAmount };
   }, [form]);
 
   const openNew = () => {
@@ -169,6 +172,7 @@ export function RepasseParticularComponent() {
       patient_name: item.nome_paciente || '',
       procedure_type: item.tipo_procedimento || '',
       gross_value: String(item.valor || 0),
+      valor_clinica: String(item.valor_clinica || 0),
       payment_method: item.forma_pagamento || 'pix',
       payment_tax_rate: String(item.payment_tax_rate || 0),
       invoice_tax_rate: String(item.invoice_tax_rate || 0),
@@ -209,6 +213,8 @@ export function RepasseParticularComponent() {
       forma_pagamento: calc.isSplit ? 'mixed' : form.payment_method,
       quantidade: 1,
       valor: gross,
+      valor_clinica: calc.valorClinica,
+      valor_repasse: calc.valorRepasse,
       valor_repasse_medico: calc.netClinic,
       unidade_id: form.unidade_id ? Number(form.unidade_id) : null,
       desconto_paciente: 0,
@@ -475,6 +481,20 @@ export function RepasseParticularComponent() {
                   <label>Valor bruto *</label>
                   <MoneyInput value={form.gross_value} onChange={(v) => update('gross_value', v)} required />
                 </div>
+                <div className="rp-field">
+                  <label>Valor da clínica</label>
+                  <MoneyInput value={form.valor_clinica} onChange={(v) => update('valor_clinica', v)} />
+                </div>
+                <div className="rp-field">
+                  <label>Valor de repasse (bruto − clínica)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={calc.valorRepasse ? calc.valorRepasse.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                    placeholder="0,00"
+                    style={{ background: '#f6f2fb', color: '#4a2d6e', fontWeight: 600 }}
+                  />
+                </div>
               </div>
 
               {/* Split payment */}
@@ -587,6 +607,14 @@ export function RepasseParticularComponent() {
                 <div className="rp-calc-row">
                   <span className="rp-calc-label">Valor bruto</span>
                   <span className="rp-calc-val">{money(calc.gross)}</span>
+                </div>
+                <div className="rp-calc-row">
+                  <span className="rp-calc-label">Valor da clínica</span>
+                  <span className="rp-calc-val">-{money(calc.valorClinica)}</span>
+                </div>
+                <div className="rp-calc-row">
+                  <span className="rp-calc-label">Valor de repasse</span>
+                  <span className={`rp-calc-val ${calc.valorRepasse < 0 ? 'red' : 'green'}`}>{money(calc.valorRepasse)}</span>
                 </div>
                 {calc.paymentTaxAmount > 0 && (
                   <div className="rp-calc-row">

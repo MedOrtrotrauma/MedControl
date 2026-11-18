@@ -125,6 +125,7 @@ export interface Repasse {
   unidade?: string;
   vinculo?: 'externo' | 'socio';
   valor_repasse: number;
+  valor_clinica?: number;
   check_conferencia: boolean;
   desc_adm?: boolean;
   desc_chefe_faturamento?: boolean;
