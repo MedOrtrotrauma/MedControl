@@ -85,7 +85,7 @@ export function RelatoriosComponent() {
       tr:nth-child(even) td { background: #faf7fd; }
       .footer { margin-top: 24px; font-size: 10px; color: #8a7a9e; text-align: right; }
     </style></head><body>
-    <div class="header"><div><h1>Vertebrare</h1><span>Relatório de Repasses — ${new Date().toLocaleDateString('pt-BR')}</span></div></div>
+    <div class="header"><div><h1>Vertebrare</h1><span>Relatório de Particulares — ${new Date().toLocaleDateString('pt-BR')}</span></div></div>
     <div class="summary">
       <div class="card"><span>Total bruto</span><strong>${money(totals.bruto)}</strong></div>
       <div class="card"><span>Repasse terceiros</span><strong>${money(totals.terceiros)}</strong></div>
@@ -106,7 +106,7 @@ export function RelatoriosComponent() {
   };
 
   return <div className="space-y-6">
-    <section className="hero-panel"><div><div className="eyebrow"><FileText size={15} /> Relatórios</div><h1>Relatório de repasses</h1><p>Filtre por paciente, médico, unidade, hospital, procedimento e período. Inclui terceiros e sócios.</p></div><div className="hero-actions"><button className="button button-light" onClick={exportPdf}><FileDown size={18} /> Baixar PDF</button></div></section>
+    <section className="hero-panel"><div><div className="eyebrow"><FileText size={15} /> Relatórios</div><h1>Relatório de particulares</h1><p>Filtre por paciente, médico, unidade, hospital, procedimento e período. Inclui terceiros e sócios.</p></div><div className="hero-actions"><button className="button button-light" onClick={exportPdf}><FileDown size={18} /> Baixar PDF</button></div></section>
 
     <section className="summary-grid">
       <div className="summary-card summary-blue"><span>Total bruto</span><strong>{money(totals.bruto)}</strong><small>{totals.count} lançamentos</small><CircleDollarSign /></div>

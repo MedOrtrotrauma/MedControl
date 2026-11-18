@@ -99,7 +99,7 @@ export function CirurgiasExtracaoReport() {
       tr:nth-child(even) td { background: #faf7fd; }
       .footer { margin-top: 24px; font-size: 10px; color: #8a7a9e; text-align: right; }
     </style></head><body>
-    <h1>Vertebrare — Extração de dados de cirurgias</h1>
+    <h1>Vertebrare — Relatório de cirurgias</h1>
     <h2>Médico: ${medicoNome} · Cirurgia: ${cirurgiaNome} · Período: ${dataInicio ? dateLabel(dataInicio) : 'início'} a ${dataFim ? dateLabel(dataFim) : 'hoje'} · Status: ${status === 'todos' ? 'Todos' : status === 'pago' ? 'Pago' : 'Pendente'}</h2>
     <div class="summary">
       <div class="card"><span>Total bruto</span><strong>${money(totals.bruto)}</strong></div>
@@ -131,7 +131,7 @@ export function CirurgiasExtracaoReport() {
           <div className="eyebrow">
             <FileText size={15} /> Relatórios
           </div>
-          <h1>Extração de dados de cirurgias</h1>
+          <h1>Relatório de cirurgias</h1>
           <p>
             Filtre por médico, período, cirurgia e status de pagamento (pago ou pendente).
           </p>

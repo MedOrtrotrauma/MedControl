@@ -20,7 +20,6 @@ import {
   Wallet,
 } from 'lucide-react';
 import { RepasseComponent } from './components/Repasse';
-import { ProducaoMensalComponent } from './components/ProducaoMensal';
 import { RepasseParticularComponent } from './components/RepasseParticular';
 import { ImagemComponent } from './components/Imagem';
 import { RelatoriosComponent } from './components/Relatorios';
@@ -38,32 +37,24 @@ import { LoginForm } from './components/Auth/LoginForm';
 import { FinanceiroComponent } from './components/Financeiro';
 import type { TipoUsuario } from './components/Auth/AuthContext';
 
-type Page = 'dashboard' | 'repasse_socios' | 'repasse_particulares' | 'imagem' | 'particulares' | 'relatorios' | 'relatorio_cirurgias' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
+type Page = 'dashboard' | 'repasse_socios' | 'particulares' | 'imagem' | 'relatorios' | 'relatorio_cirurgias' | 'medicos' | 'convenios' | 'hospitais' | 'unidades' | 'procedimentos' | 'cirurgias' | 'usuarios';
 
-interface MenuItem { id: Page; label: string; icon: typeof BarChart3; }
+interface MenuItem { id: Page; label: string; icon: typeof BarChart3; roles: TipoUsuario[]; }
 interface MenuGroup { label: string; icon: typeof BarChart3; items: MenuItem[]; roles: TipoUsuario[]; }
+
+// Itens de primeiro nível (sem grupo)
+const topItems: MenuItem[] = [
+  { id: 'repasse_socios', label: 'Repasses cirurgias', icon: CircleDollarSign, roles: ['administrativo', 'medico'] },
+  { id: 'particulares', label: 'Particulares', icon: CircleDollarSign, roles: ['administrativo', 'recepcao', 'medico'] },
+  { id: 'imagem', label: 'Imagem', icon: FileText, roles: ['administrativo', 'medico'] },
+];
 
 const menuGroups: MenuGroup[] = [
   {
-    label: 'Repasses', icon: CircleDollarSign, roles: ['administrativo', 'medico'],
-    items: [
-      { id: 'repasse_socios', label: 'Repasses cirurgias', icon: CircleDollarSign },
-      { id: 'repasse_particulares', label: 'Repasse particulares', icon: CircleDollarSign },
-    ],
-  },
-  {
-    label: 'Imagem', icon: FileText, roles: ['administrativo', 'medico'],
-    items: [{ id: 'imagem', label: 'Imagem', icon: FileText }],
-  },
-  {
-    label: 'Particulares', icon: CircleDollarSign, roles: ['administrativo', 'recepcao', 'medico'],
-    items: [{ id: 'particulares', label: 'Particulares', icon: CircleDollarSign }],
-  },
-  {
     label: 'Relatórios', icon: FileText, roles: ['administrativo'],
     items: [
-      { id: 'relatorios', label: 'Relatório de repasses', icon: FileText },
-      { id: 'relatorio_cirurgias', label: 'Extração de cirurgias', icon: Scissors },
+      { id: 'relatorios', label: 'Relatório de particulares', icon: FileText, roles: ['administrativo'] },
+      { id: 'relatorio_cirurgias', label: 'Relatório de cirurgias', icon: Scissors, roles: ['administrativo'] },
     ],
   },
   {
@@ -83,9 +74,9 @@ const menuGroups: MenuGroup[] = [
 const pageTitles: Record<Page, string> = {
   dashboard: 'Dashboard',
   repasse_socios: 'Repasses cirurgias',
-  repasse_particulares: 'Repasse particular',
-  relatorios: 'Relatório de repasses',
-  relatorio_cirurgias: 'Extração de dados de cirurgias',
+  particulares: 'Particulares',
+  relatorios: 'Relatório de particulares',
+  relatorio_cirurgias: 'Relatório de cirurgias',
   medicos: 'Médicos',
   convenios: 'Convênios',
   hospitais: 'Hospitais e clínicas',
@@ -94,7 +85,6 @@ const pageTitles: Record<Page, string> = {
   cirurgias: 'Cirurgias',
   usuarios: 'Cadastro de usuários',
   imagem: 'Imagem',
-  particulares: 'Particulares',
 };
 
 function AppContent() {
@@ -103,7 +93,7 @@ function AppContent() {
   const [environment, setEnvironment] = useState<'operacional' | 'financeiro'>('operacional');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Repasses', 'Imagem', 'Particulares']));
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Relatórios']));
 
   if (loading) return <div className="loading-screen"><img src="/logo_vertebrare-removebg copy 3.png" alt="Vertebrare" className="loading-logo" /><span>Carregando seu espaço...</span></div>;
   if (!user) return <LoginForm />;
@@ -122,7 +112,6 @@ function AppContent() {
   const visibleGroups = menuGroups.filter((g) => g.roles.includes(tipo));
   const showDashboard = tipo !== 'recepcao';
   const defaultPage: Page = showDashboard ? 'dashboard' : 'particulares';
-  const currentPage = page;
 
   const toggleGroup = (label: string) => {
     setOpenGroups((prev) => {
@@ -135,12 +124,11 @@ function AppContent() {
   const navigate = (nextPage: Page) => { setPage(nextPage); setSidebarOpen(false); };
 
   const renderPage = () => {
-    switch (currentPage) {
+    switch (page) {
       case 'dashboard': return <DashboardComponent />;
       case 'repasse_socios': return <RepasseComponent tipo="socio" />;
-      case 'repasse_particulares': return <RepasseParticularComponent />;
+      case 'particulares': return <RepasseParticularComponent />;
       case 'imagem': return <ImagemComponent />;
-      case 'particulares': return <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
       case 'relatorios': return <RelatoriosComponent />;
       case 'relatorio_cirurgias': return <CirurgiasExtracaoReport />;
       case 'medicos': return <MedicosCadastro />;
@@ -150,7 +138,7 @@ function AppContent() {
       case 'procedimentos': return <ProcedimentosCadastro />;
       case 'cirurgias': return <CirurgiasCadastro />;
       case 'usuarios': return <UsuariosCadastro />;
-      default: return showDashboard ? <DashboardComponent /> : <ProducaoMensalComponent initialTab="particular" visibleTabs={['particular']} />;
+      default: return showDashboard ? <DashboardComponent /> : <RepasseParticularComponent />;
     }
   };
 
@@ -178,6 +166,16 @@ function AppContent() {
               <LayoutDashboard size={16} />{!collapsed && <span>Dashboard</span>}
             </button>
           )}
+          {topItems.filter((item) => item.roles.includes(tipo)).map((item) => (
+            <button
+              key={item.id}
+              className={`menu-item ${page === item.id ? 'active' : ''}`}
+              onClick={() => navigate(item.id)}
+              title={collapsed ? item.label : undefined}
+            >
+              <item.icon size={16} />{!collapsed && <span>{item.label}</span>}
+            </button>
+          ))}
           {visibleGroups.map((group) => {
             const isOpen = openGroups.has(group.label) || collapsed;
             const hasActive = group.items.some((i) => i.id === page);
@@ -216,7 +214,7 @@ function AppContent() {
       <main className="main-area">
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button>
-          <div><span className="breadcrumb">Vertebrare / {pageTitles[currentPage]}</span><h2>{pageTitles[currentPage]}</h2></div>
+          <div><span className="breadcrumb">Vertebrare / {pageTitles[page]}</span><h2>{pageTitles[page]}</h2></div>
           <div className="topbar-actions"><span className="secure-badge"><Settings2 size={15} /> {tipo === 'administrativo' ? 'Administrador' : tipo === 'recepcao' ? 'Recepção' : 'Médico'}</span><div className="top-avatar"><UserRound size={16} /></div></div>
           <div className="topbar-avatar-mobile"><UserRound size={16} /></div>
         </header>
